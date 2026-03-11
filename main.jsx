@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 import {
   Plus,
   Minus,
@@ -29,6 +30,7 @@ import {
   saveAllPlayers as dbSaveAllPlayers,
   getAllPlayers as dbGetAllPlayers
 } from './db';
+import './index.css';
 
 // --- Components ---
 
@@ -1358,3 +1360,6 @@ export default function App() {
     </div>
   );
 }
+
+// Render app to DOM
+createRoot(document.getElementById('root')).render(<App />);
