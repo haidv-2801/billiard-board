@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   Plus,
   Minus,
@@ -20,60 +26,17 @@ import {
   Edit2,
   RotateCcw,
   ScrollText,
-  Share2
+  Share2,
 } from 'lucide-react';
 import {
   saveSession as dbSaveSession,
   getAllSessions as dbGetAllSessions,
   deleteSession as dbDeleteSession,
   saveAllPlayers as dbSaveAllPlayers,
-  getAllPlayers as dbGetAllPlayers
-} from './db';
+  getAllPlayers as dbGetAllPlayers,
+} from './lib/db';
 
-// --- Components ---
-
-const Card = ({ children, className = "" }) => (
-  <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 ${className}`}>
-    {children}
-  </div>
-);
-
-const Button = ({ children, onClick, variant = "primary", className = "", disabled = false }) => {
-  const variants = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700",
-    secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200",
-    danger: "bg-red-500 text-white hover:bg-red-600",
-    success: "bg-emerald-500 text-white hover:bg-emerald-600",
-    warning: "bg-amber-500 text-white hover:bg-amber-600",
-    outline: "border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-  };
-  return (
-    <button
-      disabled={disabled}
-      onClick={onClick}
-      className={`px-4 py-2 rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 cursor-pointer ${variants[variant]} ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Modal = ({ isOpen, onClose, title, children }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-          <h3 className="font-bold text-lg text-slate-800 dark:text-white">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full cursor-pointer text-slate-500 dark:text-slate-400"><XCircle size={24} /></button>
-        </div>
-        <div className="p-4 max-h-[80vh] overflow-y-auto">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
+import { Card, Button, Modal } from './components/ui';
 
 // --- Main App ---
 
@@ -87,10 +50,10 @@ export default function App() {
   const [sets, setSets] = useState([]);
   const [savedSessions, setSavedSessions] = useState([]);
   const [actionHistory, setActionHistory] = useState([]);
- 
+
   // State cho Set hiện tại
   const [currentSet, setCurrentSet] = useState(null);
- 
+
   // UI State
   const [view, setView] = useState('home');
   const [modals, setModals] = useState({
@@ -103,7 +66,7 @@ export default function App() {
     editPlayer: false,
     editSessionName: false,
     history: false,
-    confirmDeleteSet: false
+    confirmDeleteSet: false,
   });
   const [copied, setCopied] = useState(false);
   const [copiedHistory, setCopiedHistory] = useState(false);
@@ -111,7 +74,7 @@ export default function App() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [confirmDeleteSetId, setConfirmDeleteSetId] = useState(null);
   const [preSelectedPlayers, setPreSelectedPlayers] = useState([]);
- 
+
   const [tempData, setTempData] = useState({
     playerName: '',
     selectedPlayerId: null,
@@ -121,19 +84,23 @@ export default function App() {
     penalizeAmount: 0,
     sessionName: new Date().toLocaleDateString('vi-VN'),
     editPlayerName: '',
-    editSessionName: ''
+    editSessionName: '',
   });
 
   // --- IndexedDB: Load on mount ---
   useEffect(() => {
-    dbGetAllSessions().then(setSavedSessions).catch((err) => {
-      console.warn('Failed to load sessions from IndexedDB:', err);
-    });
-    dbGetAllPlayers().then(players => {
-      if (players.length > 0) setAllPlayers(players);
-    }).catch((err) => {
-      console.warn('Failed to load players from IndexedDB:', err);
-    });
+    dbGetAllSessions()
+      .then(setSavedSessions)
+      .catch((err) => {
+        console.warn('Failed to load sessions from IndexedDB:', err);
+      });
+    dbGetAllPlayers()
+      .then((players) => {
+        if (players.length > 0) setAllPlayers(players);
+      })
+      .catch((err) => {
+        console.warn('Failed to load players from IndexedDB:', err);
+      });
   }, []);
 
   // --- IndexedDB: Auto-save session on every change ---
@@ -144,14 +111,18 @@ export default function App() {
     const record = {
       id: session.id,
       name: session.name,
-      startTime: session.startTime instanceof Date ? session.startTime.toISOString() : session.startTime,
+      startTime:
+        session.startTime instanceof Date
+          ? session.startTime.toISOString()
+          : session.startTime,
       players: session.players,
-      sets: sets.map(s => ({
+      sets: sets.map((s) => ({
         ...s,
-        timestamp: s.timestamp instanceof Date ? s.timestamp.toISOString() : s.timestamp
+        timestamp:
+          s.timestamp instanceof Date ? s.timestamp.toISOString() : s.timestamp,
       })),
       currentSet,
-      status: 'active'
+      status: 'active',
     };
     dbSaveSession(record).catch((err) => {
       console.warn('Failed to save session to IndexedDB:', err);
@@ -162,7 +133,9 @@ export default function App() {
     if (!session) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(persistSession, 500);
-    return () => { if (saveTimeout.current) clearTimeout(saveTimeout.current); };
+    return () => {
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    };
   }, [session, sets, currentSet, persistSession]);
 
   // Auto-save players
@@ -182,7 +155,9 @@ export default function App() {
       if (currentSet && 'wakeLock' in navigator) {
         try {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
-        } catch { /* ignore — user denied or not supported */ }
+        } catch {
+          /* ignore — user denied or not supported */
+        }
       } else if (!currentSet && wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
@@ -192,9 +167,16 @@ export default function App() {
 
     // Re-acquire wake lock when page becomes visible again
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && currentSet && 'wakeLock' in navigator) {
-        navigator.wakeLock.request('screen')
-          .then(lock => { wakeLockRef.current = lock; })
+      if (
+        document.visibilityState === 'visible' &&
+        currentSet &&
+        'wakeLock' in navigator
+      ) {
+        navigator.wakeLock
+          .request('screen')
+          .then((lock) => {
+            wakeLockRef.current = lock;
+          })
           .catch(() => {});
       }
     };
@@ -212,7 +194,9 @@ export default function App() {
   // --- Handlers ---
 
   const refreshSavedSessions = useCallback(() => {
-    dbGetAllSessions().then(setSavedSessions).catch(() => {});
+    dbGetAllSessions()
+      .then(setSavedSessions)
+      .catch(() => {});
   }, []);
 
   const createSession = (name) => {
@@ -220,7 +204,7 @@ export default function App() {
       id: Date.now(),
       name: name || 'Phiên chơi ' + new Date().toLocaleDateString('vi-VN'),
       startTime: new Date(),
-      players: preSelectedPlayers.length > 0 ? [...preSelectedPlayers] : []
+      players: preSelectedPlayers.length > 0 ? [...preSelectedPlayers] : [],
     };
     setSession(newSession);
     setSets([]);
@@ -235,12 +219,14 @@ export default function App() {
       id: saved.id,
       name: saved.name,
       startTime: new Date(saved.startTime),
-      players: saved.players || []
+      players: saved.players || [],
     });
-    setSets((saved.sets || []).map(s => ({
-      ...s,
-      timestamp: new Date(s.timestamp)
-    })));
+    setSets(
+      (saved.sets || []).map((s) => ({
+        ...s,
+        timestamp: new Date(s.timestamp),
+      })),
+    );
     setCurrentSet(saved.currentSet || null);
     setView('session');
   };
@@ -256,22 +242,28 @@ export default function App() {
       const record = {
         id: session.id,
         name: session.name,
-        startTime: session.startTime instanceof Date ? session.startTime.toISOString() : session.startTime,
+        startTime:
+          session.startTime instanceof Date
+            ? session.startTime.toISOString()
+            : session.startTime,
         players: session.players,
-        sets: sets.map(s => ({
+        sets: sets.map((s) => ({
           ...s,
-          timestamp: s.timestamp instanceof Date ? s.timestamp.toISOString() : s.timestamp
+          timestamp:
+            s.timestamp instanceof Date
+              ? s.timestamp.toISOString()
+              : s.timestamp,
         })),
         currentSet: null,
         status: 'finished',
-        endTime: new Date().toISOString()
+        endTime: new Date().toISOString(),
       };
       await dbSaveSession(record).catch(() => {});
     }
     setSession(null);
     setSets([]);
     setCurrentSet(null);
-    setModals(prev => ({ ...prev, endSession: false }));
+    setModals((prev) => ({ ...prev, endSession: false }));
     refreshSavedSessions();
     setView('home');
   };
@@ -279,40 +271,40 @@ export default function App() {
   const addPlayerToSession = (name, keepModalOpen = false) => {
     if (!name.trim()) return;
     const newPlayer = { id: Date.now().toString(), name: name.trim() };
-    setSession(prev => ({
+    setSession((prev) => ({
       ...prev,
-      players: [...prev.players, newPlayer]
+      players: [...prev.players, newPlayer],
     }));
-   
+
     // Nếu đang có set hiện tại, thêm điểm 0 cho người chơi mới
     if (currentSet) {
-      setCurrentSet(prev => ({
+      setCurrentSet((prev) => ({
         ...prev,
         playerPoints: {
           ...prev.playerPoints,
-          [newPlayer.id]: 0
-        }
+          [newPlayer.id]: 0,
+        },
       }));
     }
-   
-    setAllPlayers(prev => {
-      if (prev.find(p => p.name === name.trim())) return prev;
+
+    setAllPlayers((prev) => {
+      if (prev.find((p) => p.name === name.trim())) return prev;
       return [...prev, newPlayer];
     });
     logAction('Thêm người chơi', `${name.trim()} đã được thêm vào`);
-    setTempData(prev => ({ ...prev, playerName: '' }));
+    setTempData((prev) => ({ ...prev, playerName: '' }));
     if (!keepModalOpen) {
-      setModals(prev => ({ ...prev, addPlayer: false }));
+      setModals((prev) => ({ ...prev, addPlayer: false }));
     }
   };
 
   const startNewSet = () => {
     if (session.players.length < 2) return;
     const initialPoints = {};
-    session.players.forEach(p => initialPoints[p.id] = 0);
+    session.players.forEach((p) => (initialPoints[p.id] = 0));
     setCurrentSet({
       id: sets.length + 1,
-      playerPoints: initialPoints
+      playerPoints: initialPoints,
     });
     setUndoStack([]);
     logAction('Bắt đầu set mới', `Set ${sets.length + 1} đã bắt đầu`);
@@ -320,7 +312,7 @@ export default function App() {
 
   const pushUndo = () => {
     if (!currentSet) return;
-    setUndoStack(prev => [...prev, JSON.parse(JSON.stringify(currentSet))]);
+    setUndoStack((prev) => [...prev, JSON.parse(JSON.stringify(currentSet))]);
   };
 
   const logAction = (action, details = '') => {
@@ -330,86 +322,95 @@ export default function App() {
       timestamp,
       action,
       details,
-      setId: currentSet?.id || sets.length
+      setId: currentSet?.id || sets.length,
     };
-    setActionHistory(prev => [...prev, log]);
+    setActionHistory((prev) => [...prev, log]);
   };
 
   const handleUndo = () => {
     if (undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1];
     setCurrentSet(prev);
-    setUndoStack(stack => stack.slice(0, -1));
+    setUndoStack((stack) => stack.slice(0, -1));
     logAction('Hoàn tác', 'Đã hoàn tác thao tác trước');
   };
 
   const updateScore = (playerId, delta) => {
     if (!currentSet) return;
     pushUndo();
-    setCurrentSet(prev => ({
+    setCurrentSet((prev) => ({
       ...prev,
       playerPoints: {
         ...prev.playerPoints,
-        [playerId]: (prev.playerPoints[playerId] || 0) + delta
-      }
+        [playerId]: (prev.playerPoints[playerId] || 0) + delta,
+      },
     }));
-    const playerName = session.players.find(p => p.id === playerId)?.name;
-    logAction('Cập nhật điểm', `${playerName}: ${delta > 0 ? '+' : ''}${delta} điểm`);
+    const playerName = session.players.find((p) => p.id === playerId)?.name;
+    logAction(
+      'Cập nhật điểm',
+      `${playerName}: ${delta > 0 ? '+' : ''}${delta} điểm`,
+    );
   };
 
   const handleManualScoreChange = () => {
     if (!currentSet || tempData.selectedPlayerId === null) return;
     pushUndo();
-    const playerName = session.players.find(p => p.id === tempData.selectedPlayerId)?.name;
+    const playerName = session.players.find(
+      (p) => p.id === tempData.selectedPlayerId,
+    )?.name;
     const oldScore = currentSet.playerPoints[tempData.selectedPlayerId] || 0;
     const newScore = parseInt(tempData.manualScore) || 0;
-    setCurrentSet(prev => ({
+    setCurrentSet((prev) => ({
       ...prev,
       playerPoints: {
         ...prev.playerPoints,
-        [tempData.selectedPlayerId]: newScore
-      }
+        [tempData.selectedPlayerId]: newScore,
+      },
     }));
     logAction('Chỉnh sửa điểm', `${playerName}: ${oldScore} → ${newScore}`);
-    setModals(prev => ({ ...prev, editScore: false }));
+    setModals((prev) => ({ ...prev, editScore: false }));
   };
 
   const handleRenamePlayer = () => {
     if (!tempData.selectedPlayerId || !tempData.editPlayerName.trim()) return;
-   
+
     // Update trong session
-    setSession(prev => ({
+    setSession((prev) => ({
       ...prev,
-      players: prev.players.map(p =>
+      players: prev.players.map((p) =>
         p.id === tempData.selectedPlayerId
           ? { ...p, name: tempData.editPlayerName.trim() }
-          : p
-      )
+          : p,
+      ),
     }));
-   
+
     // Update trong allPlayers
-    setAllPlayers(prev =>
-      prev.map(p =>
+    setAllPlayers((prev) =>
+      prev.map((p) =>
         p.id === tempData.selectedPlayerId
           ? { ...p, name: tempData.editPlayerName.trim() }
-          : p
-      )
+          : p,
+      ),
     );
-   
-    setModals(prev => ({ ...prev, editPlayer: false }));
-    setTempData(prev => ({ ...prev, editPlayerName: '', selectedPlayerId: null }));
+
+    setModals((prev) => ({ ...prev, editPlayer: false }));
+    setTempData((prev) => ({
+      ...prev,
+      editPlayerName: '',
+      selectedPlayerId: null,
+    }));
   };
 
   const handleRenameSession = () => {
     if (!tempData.editSessionName.trim()) return;
-   
-    setSession(prev => ({
+
+    setSession((prev) => ({
       ...prev,
-      name: tempData.editSessionName.trim()
+      name: tempData.editSessionName.trim(),
     }));
-   
-    setModals(prev => ({ ...prev, editSessionName: false }));
-    setTempData(prev => ({ ...prev, editSessionName: '' }));
+
+    setModals((prev) => ({ ...prev, editSessionName: false }));
+    setTempData((prev) => ({ ...prev, editSessionName: '' }));
   };
 
   const handlePenalizeAllAction = () => {
@@ -420,8 +421,8 @@ export default function App() {
     pushUndo();
     const newPoints = { ...currentSet.playerPoints };
     const otherPlayersCount = Object.keys(newPoints).length - 1;
-   
-    Object.keys(newPoints).forEach(id => {
+
+    Object.keys(newPoints).forEach((id) => {
       if (id === winnerId) {
         newPoints[id] += otherPlayersCount * amountY;
       } else {
@@ -429,46 +430,63 @@ export default function App() {
       }
     });
 
-    const winnerName = session.players.find(p => p.id === winnerId)?.name;
-    logAction('Cả làng đền', `${winnerName} thắng, mỗi người đền ${amountY} điểm`);
-    setCurrentSet(prev => ({ ...prev, playerPoints: newPoints }));
-    setModals(prev => ({ ...prev, penalizeAll: false }));
-    setTempData(prev => ({ ...prev, selectedPlayerId: null, penalizeAmount: 0 }));
+    const winnerName = session.players.find((p) => p.id === winnerId)?.name;
+    logAction(
+      'Cả làng đền',
+      `${winnerName} thắng, mỗi người đền ${amountY} điểm`,
+    );
+    setCurrentSet((prev) => ({ ...prev, playerPoints: newPoints }));
+    setModals((prev) => ({ ...prev, penalizeAll: false }));
+    setTempData((prev) => ({
+      ...prev,
+      selectedPlayerId: null,
+      penalizeAmount: 0,
+    }));
   };
 
   const handleTransfer = () => {
     const { selectedPlayerId, targetPlayerId, transferAmount } = tempData;
-    if (!currentSet || !selectedPlayerId || !targetPlayerId || selectedPlayerId === targetPlayerId || transferAmount === 0) return;
+    if (
+      !currentSet ||
+      !selectedPlayerId ||
+      !targetPlayerId ||
+      selectedPlayerId === targetPlayerId ||
+      transferAmount === 0
+    )
+      return;
 
     pushUndo();
-    const fromName = session.players.find(p => p.id === selectedPlayerId)?.name;
-    const toName = session.players.find(p => p.id === targetPlayerId)?.name;
-    setCurrentSet(prev => ({
+    const fromName = session.players.find(
+      (p) => p.id === selectedPlayerId,
+    )?.name;
+    const toName = session.players.find((p) => p.id === targetPlayerId)?.name;
+    setCurrentSet((prev) => ({
       ...prev,
       playerPoints: {
         ...prev.playerPoints,
-        [selectedPlayerId]: prev.playerPoints[selectedPlayerId] - transferAmount,
-        [targetPlayerId]: prev.playerPoints[targetPlayerId] + transferAmount
-      }
+        [selectedPlayerId]:
+          prev.playerPoints[selectedPlayerId] - transferAmount,
+        [targetPlayerId]: prev.playerPoints[targetPlayerId] + transferAmount,
+      },
     }));
     logAction('X đền Y', `${fromName} đền ${toName} ${transferAmount} điểm`);
-    setModals(prev => ({ ...prev, transfer: false }));
-    setTempData(prev => ({ ...prev, transferAmount: 0 }));
+    setModals((prev) => ({ ...prev, transfer: false }));
+    setTempData((prev) => ({ ...prev, transferAmount: 0 }));
   };
 
   const finishSet = () => {
     if (!currentSet) return;
     logAction('Kết thúc set', `Set ${currentSet.id} đã hoàn thành`);
-    setSets(prev => [...prev, { ...currentSet, timestamp: new Date() }]);
+    setSets((prev) => [...prev, { ...currentSet, timestamp: new Date() }]);
     setCurrentSet(null);
     setUndoStack([]);
   };
 
   const deleteSet = (setId) => {
-    const deletedSet = sets.find(s => s.id === setId);
+    const deletedSet = sets.find((s) => s.id === setId);
     if (!deletedSet) return;
-   
-    setSets(prev => prev.filter(s => s.id !== setId));
+
+    setSets((prev) => prev.filter((s) => s.id !== setId));
     logAction('Xóa set', `Đã xóa Set ${setId}`);
     setConfirmDeleteSetId(null);
   };
@@ -477,10 +495,10 @@ export default function App() {
     if (!currentSet) return;
     pushUndo();
     const resetPoints = {};
-    session.players.forEach(p => resetPoints[p.id] = 0);
-    setCurrentSet(prev => ({
+    session.players.forEach((p) => (resetPoints[p.id] = 0));
+    setCurrentSet((prev) => ({
       ...prev,
-      playerPoints: resetPoints
+      playerPoints: resetPoints,
     }));
     logAction('Reset điểm', `Đã reset tất cả điểm Set ${currentSet.id} về 0`);
   };
@@ -488,8 +506,8 @@ export default function App() {
   const calculateTotalScores = useMemo(() => {
     const totals = {};
     if (!session) return totals;
-    session.players.forEach(p => totals[p.id] = 0);
-    sets.forEach(set => {
+    session.players.forEach((p) => (totals[p.id] = 0));
+    sets.forEach((set) => {
       Object.entries(set.playerPoints).forEach(([pid, score]) => {
         if (totals[pid] !== undefined) totals[pid] += score;
       });
@@ -500,7 +518,7 @@ export default function App() {
   const sortedRankings = useMemo(() => {
     if (!session) return [];
     return [...session.players]
-      .map(p => ({ ...p, total: calculateTotalScores[p.id] || 0 }))
+      .map((p) => ({ ...p, total: calculateTotalScores[p.id] || 0 }))
       .sort((a, b) => b.total - a.total);
   }, [session, calculateTotalScores]);
 
@@ -511,9 +529,10 @@ export default function App() {
     const players = session.players;
     const totals = calculateTotalScores;
     const rankings = sortedRankings;
-    const startTime = session.startTime instanceof Date
-      ? session.startTime
-      : new Date(session.startTime);
+    const startTime =
+      session.startTime instanceof Date
+        ? session.startTime
+        : new Date(session.startTime);
 
     // Header
     let report = '';
@@ -538,11 +557,12 @@ export default function App() {
       report += `📋 CHI TIẾT TỪNG SET\n`;
       report += `─────────────────────────\n`;
       sets.forEach((set) => {
-        const time = set.timestamp instanceof Date
-          ? set.timestamp
-          : new Date(set.timestamp);
+        const time =
+          set.timestamp instanceof Date
+            ? set.timestamp
+            : new Date(set.timestamp);
         report += `Set ${set.id} (${time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}):\n`;
-        players.forEach(p => {
+        players.forEach((p) => {
           const score = set.playerPoints[p.id] || 0;
           const sign = score > 0 ? '+' : '';
           report += `  ${p.name}: ${sign}${score}\n`;
@@ -554,7 +574,7 @@ export default function App() {
     // Summary line
     report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     report += `📊 TỔNG KẾT\n`;
-    players.forEach(p => {
+    players.forEach((p) => {
       const total = totals[p.id] || 0;
       const sign = total > 0 ? '+' : '';
       const bar = total > 0 ? '🟢' : total < 0 ? '🔴' : '⚪';
@@ -590,9 +610,11 @@ export default function App() {
       try {
         await navigator.share({
           title: session?.name || 'Pool Master',
-          text: report
+          text: report,
         });
-      } catch { /* user cancelled share — ignore */ }
+      } catch {
+        /* user cancelled share — ignore */
+      }
     } else {
       // Fallback: copy to clipboard if Web Share not supported
       handleCopyReport();
@@ -601,21 +623,20 @@ export default function App() {
 
   const generateHistoryReport = useCallback(() => {
     if (actionHistory.length === 0) return 'Chưa có lịch sử thao tác';
-   
+
     let report = `📜 LỊCH SỬ THAO TÁC - ${session?.name}\n`;
     report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-   
+
     actionHistory.forEach((log, idx) => {
-      const time = log.timestamp instanceof Date
-        ? log.timestamp
-        : new Date(log.timestamp);
+      const time =
+        log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp);
       report += `${idx + 1}. [${time.toLocaleTimeString('vi-VN')}] ${log.action}\n`;
       if (log.details) {
         report += `   ${log.details}\n`;
       }
       report += `\n`;
     });
-   
+
     report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     report += `Tổng ${actionHistory.length} thao tác`;
     return report;
@@ -658,23 +679,36 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center p-6">
         <div className="w-full max-w-md space-y-8 pt-12">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">Pool Master</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Trình tính điểm Billiard chuyên nghiệp</p>
+            <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">
+              Pool Master
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">
+              Trình tính điểm Billiard chuyên nghiệp
+            </p>
           </div>
-         
+
           {/* New Session */}
           <Card className="p-6 space-y-4">
             <div className="text-left space-y-2">
-              <label className="text-sm font-semibold text-slate-600 dark:text-slate-300">Tên Phiên Chơi</label>
+              <label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                Tên Phiên Chơi
+              </label>
               <input
                 className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                 placeholder="Ví dụ: Tối Thứ 6 Cùng Quý"
                 value={tempData.sessionName || ''}
-                onChange={(e) => setTempData({...tempData, sessionName: e.target.value})}
-                onKeyDown={(e) => e.key === 'Enter' && createSession(tempData.sessionName)}
+                onChange={(e) =>
+                  setTempData({ ...tempData, sessionName: e.target.value })
+                }
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && createSession(tempData.sessionName)
+                }
               />
             </div>
-            <Button className="w-full py-4 text-lg" onClick={() => createSession(tempData.sessionName)}>
+            <Button
+              className="w-full py-4 text-lg"
+              onClick={() => createSession(tempData.sessionName)}
+            >
               Bắt Đầu Session Mới
             </Button>
           </Card>
@@ -683,20 +717,27 @@ export default function App() {
           {savedSessions.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Clock size={14}/> Phiên chơi đã lưu
+                <Clock size={14} /> Phiên chơi đã lưu
               </h3>
               <div className="space-y-2">
-                {savedSessions.map(s => (
-                  <Card key={s.id} className="p-4 hover:shadow-md transition-shadow">
+                {savedSessions.map((s) => (
+                  <Card
+                    key={s.id}
+                    className="p-4 hover:shadow-md transition-shadow"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0 mr-3">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-slate-800 dark:text-white truncate">{s.name}</h4>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            s.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                              : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                          }`}>
+                          <h4 className="font-bold text-slate-800 dark:text-white truncate">
+                            {s.name}
+                          </h4>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              s.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                            }`}
+                          >
                             {s.status === 'active' ? 'Đang chơi' : 'Đã xong'}
                           </span>
                         </div>
@@ -704,11 +745,15 @@ export default function App() {
                           <span className="text-xs text-slate-400 dark:text-slate-500">
                             {(s.players || []).length} người chơi
                           </span>
-                          <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            •
+                          </span>
                           <span className="text-xs text-slate-400 dark:text-slate-500">
                             {(s.sets || []).length} set
                           </span>
-                          <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            •
+                          </span>
                           <span className="text-xs text-slate-400 dark:text-slate-500">
                             {formatTimeAgo(s.updatedAt)}
                           </span>
@@ -725,7 +770,10 @@ export default function App() {
                         {confirmDeleteId === s.id ? (
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => { deleteSavedSession(s.id); setConfirmDeleteId(null); }}
+                              onClick={() => {
+                                deleteSavedSession(s.id);
+                                setConfirmDeleteId(null);
+                              }}
                               className="px-2.5 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                             >
                               Xoá
@@ -758,19 +806,26 @@ export default function App() {
           {allPlayers.length > 0 && (
             <div className="text-left space-y-3">
               <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Người chơi cũ {preSelectedPlayers.length > 0 && <span className="text-blue-500 dark:text-blue-400 normal-case">— đã chọn {preSelectedPlayers.length}</span>}
+                Người chơi cũ{' '}
+                {preSelectedPlayers.length > 0 && (
+                  <span className="text-blue-500 dark:text-blue-400 normal-case">
+                    — đã chọn {preSelectedPlayers.length}
+                  </span>
+                )}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {allPlayers.slice(0, 10).map(p => {
-                  const isSelected = preSelectedPlayers.some(pp => pp.id === p.id);
+                {allPlayers.slice(0, 10).map((p) => {
+                  const isSelected = preSelectedPlayers.some(
+                    (pp) => pp.id === p.id,
+                  );
                   return (
                     <button
                       key={p.id}
                       onClick={() => {
-                        setPreSelectedPlayers(prev =>
+                        setPreSelectedPlayers((prev) =>
                           isSelected
-                            ? prev.filter(pp => pp.id !== p.id)
-                            : [...prev, p]
+                            ? prev.filter((pp) => pp.id !== p.id)
+                            : [...prev, p],
                         );
                       }}
                       className={`px-3 py-1 rounded-full text-sm font-medium transition-all cursor-pointer border ${
@@ -779,7 +834,8 @@ export default function App() {
                           : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-300 hover:text-blue-500'
                       }`}
                     >
-                      {isSelected ? '✓ ' : ''}{p.name}
+                      {isSelected ? '✓ ' : ''}
+                      {p.name}
                     </button>
                   );
                 })}
@@ -799,76 +855,114 @@ export default function App() {
           <div className="flex items-center gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-bold text-slate-800 dark:text-white truncate max-w-[200px]">{session?.name}</h2>
+                <h2 className="font-bold text-slate-800 dark:text-white truncate max-w-[200px]">
+                  {session?.name}
+                </h2>
                 <button
                   onClick={() => {
-                    setTempData(prev => ({ ...prev, editSessionName: session.name }));
-                    setModals({...modals, editSessionName: true});
+                    setTempData((prev) => ({
+                      ...prev,
+                      editSessionName: session.name,
+                    }));
+                    setModals({ ...modals, editSessionName: true });
                   }}
                   className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors cursor-pointer"
                   title="Đổi tên phiên chơi"
                 >
-                  <Edit2 size={16} className="text-slate-400"/>
+                  <Edit2 size={16} className="text-slate-400" />
                 </button>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Bắt đầu: {session?.startTime instanceof Date
-                  ? session.startTime.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})
-                  : new Date(session?.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})
-                }
+                Bắt đầu:{' '}
+                {session?.startTime instanceof Date
+                  ? session.startTime.toLocaleTimeString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : new Date(session?.startTime).toLocaleTimeString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
             <Button
               variant="secondary"
-              onClick={() => setModals({...modals, history: true})}
+              onClick={() => setModals({ ...modals, history: true })}
               className="flex items-center gap-1.5 text-sm"
             >
-              <ScrollText size={16}/> Log
+              <ScrollText size={16} /> Log
             </Button>
             <Button
               variant="secondary"
-              onClick={() => setModals({...modals, report: true})}
+              onClick={() => setModals({ ...modals, report: true })}
               className="flex items-center gap-1.5 text-sm"
             >
-              <FileText size={16}/> Báo cáo
+              <FileText size={16} /> Báo cáo
             </Button>
-            <Button variant="secondary" onClick={() => setModals({...modals, endSession: true})}>Kết thúc</Button>
+            <Button
+              variant="secondary"
+              onClick={() => setModals({ ...modals, endSession: true })}
+            >
+              Kết thúc
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
-       
         <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
           <Card className="p-4">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white"><Users size={18}/> Người Chơi</h3>
-              <button onClick={() => setModals({...modals, addPlayer: true})} className="p-1 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"><UserPlus size={20}/></button>
+              <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white">
+                <Users size={18} /> Người Chơi
+              </h3>
+              <button
+                onClick={() => setModals({ ...modals, addPlayer: true })}
+                className="p-1 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+              >
+                <UserPlus size={20} />
+              </button>
             </div>
             <div className="space-y-2">
-              {session.players.map(p => (
-                <div key={p.id} className="flex justify-between items-center p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 group">
+              {session.players.map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    setTempData((prev) => ({
+                      ...prev,
+                      selectedPlayerId: p.id,
+                      editPlayerName: p.name,
+                    }));
+                    setModals({ ...modals, editPlayer: true });
+                  }}
+                  className="flex justify-between items-center p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 group"
+                >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="font-medium truncate text-slate-700 dark:text-slate-200">{p.name}</span>
+                    <span className="font-medium truncate text-slate-700 dark:text-slate-200">
+                      {p.name}
+                    </span>
                     <button
                       onClick={() => {
-                        setTempData(prev => ({
+                        setTempData((prev) => ({
                           ...prev,
                           selectedPlayerId: p.id,
-                          editPlayerName: p.name
+                          editPlayerName: p.name,
                         }));
-                        setModals({...modals, editPlayer: true});
+                        setModals({ ...modals, editPlayer: true });
                       }}
                       className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded cursor-pointer"
                       title="Đổi tên"
                     >
-                      <Edit2 size={14} className="text-slate-400"/>
+                      <Edit2 size={14} className="text-slate-400" />
                     </button>
                   </div>
-                  <span className={`font-bold tabular-nums ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {calculateTotalScores[p.id] > 0 ? '+' : ''}{calculateTotalScores[p.id]}
+                  <span
+                    className={`font-bold tabular-nums ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
+                  >
+                    {calculateTotalScores[p.id] > 0 ? '+' : ''}
+                    {calculateTotalScores[p.id]}
                   </span>
                 </div>
               ))}
@@ -876,7 +970,9 @@ export default function App() {
           </Card>
 
           <Card className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-none shadow-lg">
-            <h3 className="font-bold flex items-center gap-2 mb-4"><Trophy size={18}/> Bảng Xếp Hạng</h3>
+            <h3 className="font-bold flex items-center gap-2 mb-4">
+              <Trophy size={18} /> Bảng Xếp Hạng
+            </h3>
             <div className="space-y-3">
               {sortedRankings.map((p, idx) => (
                 <div key={p.id} className="flex items-center gap-3">
@@ -908,41 +1004,70 @@ export default function App() {
           ) : (
             <div className="space-y-6">
               <div className="flex flex-wrap gap-3 justify-between items-center">
-                <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">SET {currentSet.id}</h3>
+                <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">
+                  SET {currentSet.id}
+                </h3>
                 <div className="flex gap-2 flex-wrap">
-                  <Button variant="secondary" onClick={handleUndo} disabled={undoStack.length === 0} className="flex items-center gap-1 text-sm">
-                    <Undo2 size={14}/> Hoàn tác {undoStack.length > 0 && `(${undoStack.length})`}
+                  <Button
+                    variant="secondary"
+                    onClick={handleUndo}
+                    disabled={undoStack.length === 0}
+                    className="flex items-center gap-1 text-sm"
+                  >
+                    <Undo2 size={14} /> Hoàn tác{' '}
+                    {undoStack.length > 0 && `(${undoStack.length})`}
                   </Button>
-                  <Button variant="secondary" onClick={resetCurrentSet} className="flex items-center gap-1 text-sm">
-                    <RotateCcw size={14}/> Reset
+                  <Button
+                    variant="secondary"
+                    onClick={resetCurrentSet}
+                    className="flex items-center gap-1 text-sm"
+                  >
+                    <RotateCcw size={14} /> Reset
                   </Button>
-                  <Button variant="warning" onClick={() => setModals({...modals, penalizeAll: true})} className="flex items-center gap-1 text-sm">
-                    <Crown size={14}/> Cả làng đền
+                  <Button
+                    variant="warning"
+                    onClick={() => setModals({ ...modals, penalizeAll: true })}
+                    className="flex items-center gap-1 text-sm"
+                  >
+                    <Crown size={14} /> Cả làng đền
                   </Button>
-                  <Button variant="secondary" onClick={() => setModals({...modals, transfer: true})} className="flex items-center gap-1 text-sm">
-                    <ArrowRightLeft size={14}/> X đền Y
+                  <Button
+                    variant="secondary"
+                    onClick={() => setModals({ ...modals, transfer: true })}
+                    className="flex items-center gap-1 text-sm"
+                  >
+                    <ArrowRightLeft size={14} /> X đền Y
                   </Button>
                 </div>
               </div>
 
               {/* Player Score Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {session.players.map(p => (
-                  <Card key={p.id} className="p-5 flex flex-col items-center space-y-4 relative group">
+                {session.players.map((p) => (
+                  <Card
+                    key={p.id}
+                    className="p-5 flex flex-col items-center space-y-4 relative group"
+                  >
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => {
-                          setTempData({...tempData, selectedPlayerId: p.id, manualScore: currentSet.playerPoints[p.id] || 0});
-                          setModals({...modals, editScore: true});
+                          setTempData({
+                            ...tempData,
+                            selectedPlayerId: p.id,
+                            manualScore: currentSet.playerPoints[p.id] || 0,
+                          });
+                          setModals({ ...modals, editScore: true });
                         }}
                         className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 cursor-pointer"
                       >
-                        <Settings size={20}/>
+                        <Settings size={20} />
                       </button>
                     </div>
-                   
+
                     <div className="text-center">
-                      <p className="font-black text-slate-400 dark:text-slate-500 text-xs uppercase tracking-[0.2em]">{p.name}</p>
+                      <p className="font-black text-slate-400 dark:text-slate-500 text-xs uppercase tracking-[0.2em]">
+                        {p.name}
+                      </p>
                       <div className="text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
                         {currentSet.playerPoints[p.id] || 0}
                       </div>
@@ -966,7 +1091,7 @@ export default function App() {
                     {/* Step Controls */}
                     <div className="w-full space-y-2">
                       <div className="grid grid-cols-5 w-full gap-1.5">
-                        {SCORE_STEPS.map(val => (
+                        {SCORE_STEPS.map((val) => (
                           <button
                             key={`plus-${val}`}
                             onClick={() => updateScore(p.id, val)}
@@ -977,7 +1102,7 @@ export default function App() {
                         ))}
                       </div>
                       <div className="grid grid-cols-5 w-full gap-1.5">
-                        {SCORE_STEPS.map(val => (
+                        {SCORE_STEPS.map((val) => (
                           <button
                             key={`minus-${val}`}
                             onClick={() => updateScore(p.id, -val)}
@@ -993,7 +1118,11 @@ export default function App() {
               </div>
 
               <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-                <Button variant="success" className="w-full py-5 text-xl font-black shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest" onClick={finishSet}>
+                <Button
+                  variant="success"
+                  className="w-full py-5 text-xl font-black shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest"
+                  onClick={finishSet}
+                >
                   Kết Thúc Set & Lưu
                 </Button>
               </div>
@@ -1003,23 +1132,38 @@ export default function App() {
           {/* History */}
           {sets.length > 0 && (
             <div className="mt-12 space-y-4">
-              <h3 className="font-bold flex items-center gap-2 text-slate-400 dark:text-slate-500 uppercase tracking-widest text-xs px-2"><History size={16}/> Nhật ký ván đấu</h3>
+              <h3 className="font-bold flex items-center gap-2 text-slate-400 dark:text-slate-500 uppercase tracking-widest text-xs px-2">
+                <History size={16} /> Nhật ký ván đấu
+              </h3>
               <div className="space-y-3">
                 {[...sets].reverse().map((set) => (
-                  <Card key={set.id} className="p-4 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 group">
+                  <Card
+                    key={set.id}
+                    className="p-4 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 group"
+                  >
                     <div>
-                      <span className="font-black text-slate-700 dark:text-slate-300">SET {set.id}</span>
+                      <span className="font-black text-slate-700 dark:text-slate-300">
+                        SET {set.id}
+                      </span>
                       <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                        {(set.timestamp instanceof Date ? set.timestamp : new Date(set.timestamp)).toLocaleTimeString('vi-VN')}
+                        {(set.timestamp instanceof Date
+                          ? set.timestamp
+                          : new Date(set.timestamp)
+                        ).toLocaleTimeString('vi-VN')}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex gap-4 overflow-x-auto no-scrollbar">
-                        {session.players.map(p => (
+                        {session.players.map((p) => (
                           <div key={p.id} className="text-right min-w-[60px]">
-                            <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-bold truncate">{p.name}</p>
-                            <p className={`font-black tabular-nums ${set.playerPoints[p.id] >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-400'}`}>
-                              {set.playerPoints[p.id] > 0 ? '+' : ''}{set.playerPoints[p.id]}
+                            <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-bold truncate">
+                              {p.name}
+                            </p>
+                            <p
+                              className={`font-black tabular-nums ${set.playerPoints[p.id] >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-400'}`}
+                            >
+                              {set.playerPoints[p.id] > 0 ? '+' : ''}
+                              {set.playerPoints[p.id]}
                             </p>
                           </div>
                         ))}
@@ -1060,7 +1204,7 @@ export default function App() {
       {/* --- Modals --- */}
       <Modal
         isOpen={modals.addPlayer}
-        onClose={() => setModals({...modals, addPlayer: false})}
+        onClose={() => setModals({ ...modals, addPlayer: false })}
         title="Thêm Người Chơi"
       >
         <div className="space-y-4">
@@ -1069,21 +1213,35 @@ export default function App() {
             className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên người chơi..."
             value={tempData.playerName}
-            onChange={(e) => setTempData({...tempData, playerName: e.target.value})}
-            onKeyDown={(e) => e.key === 'Enter' && addPlayerToSession(tempData.playerName)}
+            onChange={(e) =>
+              setTempData({ ...tempData, playerName: e.target.value })
+            }
+            onKeyDown={(e) =>
+              e.key === 'Enter' && addPlayerToSession(tempData.playerName)
+            }
           />
-          <Button className="w-full py-4" onClick={() => addPlayerToSession(tempData.playerName)}>Xác Nhận</Button>
-         
+          <Button
+            className="w-full py-4"
+            onClick={() => addPlayerToSession(tempData.playerName)}
+          >
+            Xác Nhận
+          </Button>
+
           {/* Quick add from old players */}
           {(() => {
-            const sessionPlayerNames = session?.players?.map(p => p.name) || [];
-            const availablePlayers = allPlayers.filter(p => !sessionPlayerNames.includes(p.name));
+            const sessionPlayerNames =
+              session?.players?.map((p) => p.name) || [];
+            const availablePlayers = allPlayers.filter(
+              (p) => !sessionPlayerNames.includes(p.name),
+            );
             if (availablePlayers.length === 0) return null;
             return (
               <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
-                <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thêm nhanh</label>
+                <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Thêm nhanh
+                </label>
                 <div className="flex flex-wrap gap-2">
-                  {availablePlayers.map(p => (
+                  {availablePlayers.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => addPlayerToSession(p.name, true)}
@@ -1101,17 +1259,21 @@ export default function App() {
 
       <Modal
         isOpen={modals.penalizeAll}
-        onClose={() => setModals({...modals, penalizeAll: false})}
+        onClose={() => setModals({ ...modals, penalizeAll: false })}
         title="Cả Làng Đền"
       >
         <div className="space-y-6">
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Người thắng (Người được đền)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Người thắng (Người được đền)
+            </label>
             <div className="grid grid-cols-2 gap-2">
-              {session.players.map(p => (
+              {session.players.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => setTempData({...tempData, selectedPlayerId: p.id})}
+                  onClick={() =>
+                    setTempData({ ...tempData, selectedPlayerId: p.id })
+                  }
                   className={`p-3 rounded-xl font-bold border-2 transition-all cursor-pointer ${tempData.selectedPlayerId === p.id ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-700 border-transparent text-slate-600 dark:text-slate-300'}`}
                 >
                   {p.name}
@@ -1120,17 +1282,30 @@ export default function App() {
             </div>
           </div>
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mức đền (cộng dồn)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Mức đền (cộng dồn)
+            </label>
             <div className="text-center bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
-              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng mức đền:</span>
-              <span className="ml-2 text-3xl font-black text-amber-600">{tempData.penalizeAmount}</span>
-              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                Tổng mức đền:
+              </span>
+              <span className="ml-2 text-3xl font-black text-amber-600">
+                {tempData.penalizeAmount}
+              </span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">
+                điểm
+              </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {PENALIZE_STEPS.map(val => (
+              {PENALIZE_STEPS.map((val) => (
                 <button
                   key={val}
-                  onClick={() => setTempData(prev => ({...prev, penalizeAmount: prev.penalizeAmount + val}))}
+                  onClick={() =>
+                    setTempData((prev) => ({
+                      ...prev,
+                      penalizeAmount: prev.penalizeAmount + val,
+                    }))
+                  }
                   className="py-3 rounded-xl font-black text-sm bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95 shadow-sm cursor-pointer"
                 >
                   +{val}
@@ -1138,13 +1313,22 @@ export default function App() {
               ))}
             </div>
             <button
-              onClick={() => setTempData(prev => ({...prev, penalizeAmount: 0}))}
+              onClick={() =>
+                setTempData((prev) => ({ ...prev, penalizeAmount: 0 }))
+              }
               className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
             >
               Reset về 0
             </button>
           </div>
-          <Button variant="success" className="w-full py-4 text-lg font-black" disabled={!tempData.selectedPlayerId || tempData.penalizeAmount === 0} onClick={handlePenalizeAllAction}>
+          <Button
+            variant="success"
+            className="w-full py-4 text-lg font-black"
+            disabled={
+              !tempData.selectedPlayerId || tempData.penalizeAmount === 0
+            }
+            onClick={handlePenalizeAllAction}
+          >
             Thực Hiện Đền ({tempData.penalizeAmount} điểm)
           </Button>
         </div>
@@ -1152,40 +1336,79 @@ export default function App() {
 
       <Modal
         isOpen={modals.transfer}
-        onClose={() => setModals({...modals, transfer: false})}
+        onClose={() => setModals({ ...modals, transfer: false })}
         title="X Đền Y"
       >
         <div className="space-y-6">
           <div className="grid grid-cols-11 items-center gap-1">
             <div className="col-span-5 space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Người Đền (X)</label>
-              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white" value={tempData.selectedPlayerId || ''} onChange={(e) => setTempData({...tempData, selectedPlayerId: e.target.value})}>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">
+                Người Đền (X)
+              </label>
+              <select
+                className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white"
+                value={tempData.selectedPlayerId || ''}
+                onChange={(e) =>
+                  setTempData({ ...tempData, selectedPlayerId: e.target.value })
+                }
+              >
                 <option value="">Chọn...</option>
-                {session.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {session.players.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </div>
-            <div className="col-span-1 text-center mt-6 text-slate-300 dark:text-slate-500"><ArrowRightLeft size={16} /></div>
+            <div className="col-span-1 text-center mt-6 text-slate-300 dark:text-slate-500">
+              <ArrowRightLeft size={16} />
+            </div>
             <div className="col-span-5 space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Người Nhận (Y)</label>
-              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white" value={tempData.targetPlayerId || ''} onChange={(e) => setTempData({...tempData, targetPlayerId: e.target.value})}>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">
+                Người Nhận (Y)
+              </label>
+              <select
+                className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white"
+                value={tempData.targetPlayerId || ''}
+                onChange={(e) =>
+                  setTempData({ ...tempData, targetPlayerId: e.target.value })
+                }
+              >
                 <option value="">Chọn...</option>
-                {session.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {session.players.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
-         
+
           <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mức đền (cộng dồn)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Mức đền (cộng dồn)
+            </label>
             <div className="text-center bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
-              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng cộng:</span>
-              <span className="ml-2 text-3xl font-black text-blue-600">{tempData.transferAmount}</span>
-              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                Tổng cộng:
+              </span>
+              <span className="ml-2 text-3xl font-black text-blue-600">
+                {tempData.transferAmount}
+              </span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">
+                điểm
+              </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {PENALIZE_STEPS.map(val => (
+              {PENALIZE_STEPS.map((val) => (
                 <button
                   key={val}
-                  onClick={() => setTempData(prev => ({...prev, transferAmount: prev.transferAmount + val}))}
+                  onClick={() =>
+                    setTempData((prev) => ({
+                      ...prev,
+                      transferAmount: prev.transferAmount + val,
+                    }))
+                  }
                   className="py-3 rounded-xl font-black text-sm bg-blue-500 hover:bg-blue-600 text-white transition-all active:scale-95 shadow-sm cursor-pointer"
                 >
                   +{val}
@@ -1193,7 +1416,9 @@ export default function App() {
               ))}
             </div>
             <button
-              onClick={() => setTempData(prev => ({...prev, transferAmount: 0}))}
+              onClick={() =>
+                setTempData((prev) => ({ ...prev, transferAmount: 0 }))
+              }
               className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
             >
               Reset về 0
@@ -1202,7 +1427,12 @@ export default function App() {
 
           <Button
             className="w-full py-4 text-lg font-black uppercase"
-            disabled={!tempData.selectedPlayerId || !tempData.targetPlayerId || tempData.selectedPlayerId === tempData.targetPlayerId || tempData.transferAmount === 0}
+            disabled={
+              !tempData.selectedPlayerId ||
+              !tempData.targetPlayerId ||
+              tempData.selectedPlayerId === tempData.targetPlayerId ||
+              tempData.transferAmount === 0
+            }
             onClick={handleTransfer}
           >
             Xác nhận đền ({tempData.transferAmount} điểm)
@@ -1212,19 +1442,32 @@ export default function App() {
 
       <Modal
         isOpen={modals.editScore}
-        onClose={() => setModals({...modals, editScore: false})}
+        onClose={() => setModals({ ...modals, editScore: false })}
         title="Chỉnh Sửa Điểm Tuyệt Đối"
       >
         <div className="space-y-4">
-          <input type="number" className="text-7xl font-black w-full bg-slate-50 dark:bg-slate-900 p-8 rounded-2xl text-center outline-none text-blue-600 dark:text-blue-400" value={tempData.manualScore} onChange={(e) => setTempData({...tempData, manualScore: e.target.value})} autoFocus />
-          <Button className="w-full py-4 text-lg font-bold" onClick={handleManualScoreChange}>Lưu Thay Đổi</Button>
+          <input
+            type="number"
+            className="text-7xl font-black w-full bg-slate-50 dark:bg-slate-900 p-8 rounded-2xl text-center outline-none text-blue-600 dark:text-blue-400"
+            value={tempData.manualScore}
+            onChange={(e) =>
+              setTempData({ ...tempData, manualScore: e.target.value })
+            }
+            autoFocus
+          />
+          <Button
+            className="w-full py-4 text-lg font-bold"
+            onClick={handleManualScoreChange}
+          >
+            Lưu Thay Đổi
+          </Button>
         </div>
       </Modal>
 
       {/* Edit Player Name Modal */}
       <Modal
         isOpen={modals.editPlayer}
-        onClose={() => setModals({...modals, editPlayer: false})}
+        onClose={() => setModals({ ...modals, editPlayer: false })}
         title="Đổi Tên Người Chơi"
       >
         <div className="space-y-4">
@@ -1233,7 +1476,9 @@ export default function App() {
             className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên mới..."
             value={tempData.editPlayerName}
-            onChange={(e) => setTempData({...tempData, editPlayerName: e.target.value})}
+            onChange={(e) =>
+              setTempData({ ...tempData, editPlayerName: e.target.value })
+            }
             onKeyDown={(e) => e.key === 'Enter' && handleRenamePlayer()}
             autoFocus
           />
@@ -1250,7 +1495,7 @@ export default function App() {
       {/* Edit Session Name Modal */}
       <Modal
         isOpen={modals.editSessionName}
-        onClose={() => setModals({...modals, editSessionName: false})}
+        onClose={() => setModals({ ...modals, editSessionName: false })}
         title="Đổi Tên Phiên Chơi"
       >
         <div className="space-y-4">
@@ -1259,7 +1504,9 @@ export default function App() {
             className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên phiên chơi mới..."
             value={tempData.editSessionName}
-            onChange={(e) => setTempData({...tempData, editSessionName: e.target.value})}
+            onChange={(e) =>
+              setTempData({ ...tempData, editSessionName: e.target.value })
+            }
             onKeyDown={(e) => e.key === 'Enter' && handleRenameSession()}
             autoFocus
           />
@@ -1276,7 +1523,7 @@ export default function App() {
       {/* Report Modal */}
       <Modal
         isOpen={modals.report}
-        onClose={() => setModals({...modals, report: false})}
+        onClose={() => setModals({ ...modals, report: false })}
         title="Báo Cáo Phiên Chơi"
       >
         <div className="space-y-4">
@@ -1289,14 +1536,22 @@ export default function App() {
               variant={copied ? 'success' : 'primary'}
               onClick={handleCopyReport}
             >
-              {copied ? <><Check size={20}/> Đã Copy!</> : <><ClipboardCopy size={20}/> Copy</>}
+              {copied ? (
+                <>
+                  <Check size={20} /> Đã Copy!
+                </>
+              ) : (
+                <>
+                  <ClipboardCopy size={20} /> Copy
+                </>
+              )}
             </Button>
             <Button
               className="flex-1 py-4 text-lg font-bold flex items-center justify-center gap-2"
               variant="secondary"
               onClick={handleShareReport}
             >
-              <Share2 size={20}/> Chia sẻ
+              <Share2 size={20} /> Chia sẻ
             </Button>
           </div>
         </div>
@@ -1305,29 +1560,43 @@ export default function App() {
       {/* History Modal */}
       <Modal
         isOpen={modals.history}
-        onClose={() => setModals({...modals, history: false})}
+        onClose={() => setModals({ ...modals, history: false })}
         title="Lịch Sử Thao Tác"
       >
         <div className="space-y-4">
           {actionHistory.length === 0 ? (
-            <p className="text-center text-slate-400 dark:text-slate-500 py-8">Chưa có lịch sử thao tác</p>
+            <p className="text-center text-slate-400 dark:text-slate-500 py-8">
+              Chưa có lịch sử thao tác
+            </p>
           ) : (
             <div className="space-y-2 max-h-[50vh] overflow-y-auto">
               {[...actionHistory].reverse().map((log, idx) => {
-                const time = log.timestamp instanceof Date
-                  ? log.timestamp
-                  : new Date(log.timestamp);
+                const time =
+                  log.timestamp instanceof Date
+                    ? log.timestamp
+                    : new Date(log.timestamp);
                 return (
-                  <div key={log.id} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div
+                    key={log.id}
+                    className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
-                        <p className="font-bold text-sm text-slate-800 dark:text-white">{log.action}</p>
+                        <p className="font-bold text-sm text-slate-800 dark:text-white">
+                          {log.action}
+                        </p>
                         {log.details && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{log.details}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            {log.details}
+                          </p>
                         )}
                       </div>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                        {time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        {time.toLocaleTimeString('vi-VN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })}
                       </span>
                     </div>
                   </div>
@@ -1341,26 +1610,56 @@ export default function App() {
             onClick={handleCopyHistory}
             disabled={actionHistory.length === 0}
           >
-            {copiedHistory ? <><Check size={20}/> Đã Copy!</> : <><ClipboardCopy size={20}/> Copy Lịch Sử</>}
+            {copiedHistory ? (
+              <>
+                <Check size={20} /> Đã Copy!
+              </>
+            ) : (
+              <>
+                <ClipboardCopy size={20} /> Copy Lịch Sử
+              </>
+            )}
           </Button>
         </div>
       </Modal>
 
-      <Modal isOpen={modals.endSession} onClose={() => setModals({...modals, endSession: false})} title="Kết Thúc">
+      <Modal
+        isOpen={modals.endSession}
+        onClose={() => setModals({ ...modals, endSession: false })}
+        title="Kết Thúc"
+      >
         <div className="space-y-6">
-          <p className="text-slate-500 dark:text-slate-400">Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.</p>
+          <p className="text-slate-500 dark:text-slate-400">
+            Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.
+          </p>
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setModals({...modals, endSession: false})}>Huỷ</Button>
-            <Button variant="danger" className="flex-1 font-bold" onClick={endSession}>Kết Thúc & Lưu</Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setModals({ ...modals, endSession: false })}
+            >
+              Huỷ
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1 font-bold"
+              onClick={endSession}
+            >
+              Kết Thúc & Lưu
+            </Button>
           </div>
         </div>
       </Modal>
 
       {!currentSet && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-           <Button disabled={session.players.length < 2} className="w-full py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter" onClick={startNewSet}>
-             <Plus size={28}/> Bắt Đầu Ván Mới
-           </Button>
+          <Button
+            disabled={session.players.length < 2}
+            className="w-full py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter"
+            onClick={startNewSet}
+          >
+            <Plus size={28} /> Bắt Đầu Ván Mới
+          </Button>
         </div>
       )}
     </div>
