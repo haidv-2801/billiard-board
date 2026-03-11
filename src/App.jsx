@@ -27,6 +27,7 @@ import {
   RotateCcw,
   ScrollText,
   Share2,
+  Send,
 } from 'lucide-react';
 import {
   saveSession as dbSaveSession,
@@ -67,6 +68,16 @@ export default function App() {
     editSessionName: false,
     history: false,
     confirmDeleteSet: false,
+    telegramSettings: false,
+  });
+  const [telegramConfig, setTelegramConfig] = useState(() => {
+    const saved = localStorage.getItem('telegramConfig');
+    return saved
+      ? JSON.parse(saved)
+      : {
+          botToken: '8796969661:AAERxVj-rKxH89DFlzQtavBNxTZ9LJreEYY',
+          chatId: '-4997017779',
+        };
   });
   const [copied, setCopied] = useState(false);
   const [copiedHistory, setCopiedHistory] = useState(false);
@@ -147,8 +158,60 @@ export default function App() {
     }
   }, [allPlayers]);
 
+  // Save Telegram config to localStorage
+  useEffect(() => {
+    localStorage.setItem('telegramConfig', JSON.stringify(telegramConfig));
+  }, [telegramConfig]);
+
+  // --- Telegram Notification ---
+  const sendTelegramNotification = useCallback(
+    async (message) => {
+      if (!telegramConfig.botToken || !telegramConfig.chatId) {
+        console.warn('Telegram not configured');
+        return false;
+      }
+
+      try {
+        const response = await fetch(
+          `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: telegramConfig.chatId,
+              text: message,
+              parse_mode: 'HTML',
+            }),
+          },
+        );
+        return response.ok;
+      } catch (error) {
+        console.error('Failed to send Telegram notification:', error);
+        return false;
+      }
+    },
+    [telegramConfig],
+  );
+
   // --- Wake Lock: keep screen on during active set ---
   const wakeLockRef = useRef(null);
+
+  // --- Haptic Feedback ---
+  const hapticFeedback = useCallback((type = 'light') => {
+    if (!('vibrate' in navigator)) return;
+
+    const patterns = {
+      light: 10,
+      medium: 25,
+      heavy: 50,
+      success: [10, 50, 10],
+      error: [50, 50],
+      selection: 5,
+    };
+
+    const pattern = patterns[type] || patterns.light;
+    navigator.vibrate(pattern);
+  }, []);
 
   useEffect(() => {
     const requestWakeLock = async () => {
@@ -237,6 +300,11 @@ export default function App() {
   };
 
   const endSession = async () => {
+    // Send Telegram notification before clearing session
+    if (session && sets.length > 0) {
+      sendTelegramNotification(generateTelegramMessage('session'));
+    }
+
     if (session) {
       // Mark session as finished before going home
       const record = {
@@ -275,6 +343,7 @@ export default function App() {
       ...prev,
       players: [...prev.players, newPlayer],
     }));
+    hapticFeedback('success');
 
     // Nếu đang có set hiện tại, thêm điểm 0 cho người chơi mới
     if (currentSet) {
@@ -300,6 +369,7 @@ export default function App() {
 
   const startNewSet = () => {
     if (session.players.length < 2) return;
+    hapticFeedback('heavy');
     const initialPoints = {};
     session.players.forEach((p) => (initialPoints[p.id] = 0));
     setCurrentSet({
@@ -329,6 +399,7 @@ export default function App() {
 
   const handleUndo = () => {
     if (undoStack.length === 0) return;
+    hapticFeedback('light');
     const prev = undoStack[undoStack.length - 1];
     setCurrentSet(prev);
     setUndoStack((stack) => stack.slice(0, -1));
@@ -338,6 +409,7 @@ export default function App() {
   const updateScore = (playerId, delta) => {
     if (!currentSet) return;
     pushUndo();
+    hapticFeedback(delta > 0 ? 'light' : 'medium');
     setCurrentSet((prev) => ({
       ...prev,
       playerPoints: {
@@ -476,8 +548,14 @@ export default function App() {
 
   const finishSet = () => {
     if (!currentSet) return;
+    hapticFeedback('success');
+
+    // Send Telegram notification
+    const setWithTimestamp = { ...currentSet, timestamp: new Date() };
+    sendTelegramNotification(generateTelegramMessage('set', setWithTimestamp));
+
     logAction('Kết thúc set', `Set ${currentSet.id} đã hoàn thành`);
-    setSets((prev) => [...prev, { ...currentSet, timestamp: new Date() }]);
+    setSets((prev) => [...prev, setWithTimestamp]);
     setCurrentSet(null);
     setUndoStack([]);
   };
@@ -584,6 +662,87 @@ export default function App() {
     report += `\n🎱 Pool Master`;
     return report;
   }, [session, sets, calculateTotalScores, sortedRankings]);
+
+  // --- Telegram Message Generation ---
+  // Escape special characters for HTML
+  const escapeHTML = (text) => {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
+  const generateTelegramMessage = useCallback(
+    (type = 'set', setData = null) => {
+      if (!session) return '';
+
+      const startTime =
+        session.startTime instanceof Date
+          ? session.startTime
+          : new Date(session.startTime);
+      const totals = calculateTotalScores;
+      const rankings = sortedRankings;
+      const medals = ['🥇', '🥈', '🥉'];
+
+      let msg = '';
+
+      if (type === 'set' && setData) {
+        // Set completed message
+        msg += `🎱 <b>SET ${setData.id} - Session: ${session.name || 'Unnamed Set'} HOÀN THÀNH</b>\n`;
+        msg += `━━━━━━━━━━━━━━━━\n\n`;
+
+        msg += `<b>Kết quả:</b>\n`;
+        session.players.forEach((p) => {
+          const score = setData.playerPoints[p.id] || 0;
+          const scoreStr =
+            score > 0 ? `+${score}` : score < 0 ? `${score}` : '0';
+          const emoji = score > 0 ? '🟢' : score < 0 ? '🔴' : '⚪';
+          msg += `${emoji} ${escapeHTML(p.name)}: ${scoreStr}\n`;
+        });
+
+        msg += `\n<b>Xếp hạng hiện tại:</b>\n`;
+        rankings.forEach((p, idx) => {
+          const medal = medals[idx] || `${idx + 1}.`;
+          const totalStr =
+            p.total > 0 ? `+${p.total}` : p.total < 0 ? `${p.total}` : '0';
+          msg += `${medal} ${escapeHTML(p.name)}: ${totalStr}\n`;
+        });
+      } else if (type === 'session') {
+        // Session ended message
+        msg += `🎱 <b>KẾT THÚC PHIÊN CHƠI</b>\n`;
+        msg += `━━━━━━━━━━━━━━━━\n\n`;
+
+        msg += `📝 <b>${escapeHTML(session.name)}</b>\n`;
+        msg += `⏰ ${startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}\n`;
+        msg += `📊 ${sets.length} set đã chơi\n\n`;
+
+        msg += `<b>🏆 BẢNG XẾP HẠNG</b>\n`;
+        rankings.forEach((p, idx) => {
+          const medal = medals[idx] || `${idx + 1}.`;
+          const totalStr =
+            p.total > 0 ? `+${p.total}` : p.total < 0 ? `${p.total}` : '0';
+          msg += `${medal} ${escapeHTML(p.name)}: ${totalStr} điểm\n`;
+        });
+
+        msg += `\n<b>📋 Chi tiết các set:</b>\n`;
+        sets.forEach((set) => {
+          msg += `Set ${set.id}: `;
+          msg += session.players
+            .map((p) => {
+              const s = set.playerPoints[p.id] || 0;
+              const sStr = s > 0 ? `+${s}` : s < 0 ? `${s}` : '0';
+              return `${escapeHTML(p.name)}: ${sStr}`;
+            })
+            .join(', ');
+          msg += `\n`;
+        });
+      }
+
+      msg += `\n<i>🎱 Pool Master</i>`;
+      return msg;
+    },
+    [session, sets, calculateTotalScores, sortedRankings],
+  );
 
   const handleCopyReport = async () => {
     const report = generateReport();
@@ -907,6 +1066,14 @@ export default function App() {
             >
               Kết thúc
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setModals({ ...modals, telegramSettings: true })}
+              className="flex items-center gap-1.5 text-sm"
+              title="Cài đặt Telegram"
+            >
+              <Send size={16} />
+            </Button>
           </div>
         </div>
       </header>
@@ -917,12 +1084,16 @@ export default function App() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                 <Users size={18} /> Người Chơi
+                <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
+                  ({session.players.length})
+                </span>
               </h3>
               <button
                 onClick={() => setModals({ ...modals, addPlayer: true })}
-                className="p-1 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <UserPlus size={20} />
+                <UserPlus size={16} />
+                Thêm
               </button>
             </div>
             <div className="space-y-2">
@@ -944,7 +1115,8 @@ export default function App() {
                       {p.name}
                     </span>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setTempData((prev) => ({
                           ...prev,
                           selectedPlayerId: p.id,
@@ -993,13 +1165,23 @@ export default function App() {
               <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center animate-pulse">
                 <Plus size={40} />
               </div>
-              <Button
-                disabled={session.players.length < 2}
-                className="px-10 py-4 text-lg shadow-xl shadow-blue-200 dark:shadow-blue-900/30"
-                onClick={startNewSet}
-              >
-                Vào Bàn Ngay
-              </Button>
+              {session.players.length < 2 ? (
+                <div className="text-center space-y-2">
+                  <p className="text-slate-500 dark:text-slate-400 font-medium">
+                    Cần ít nhất 2 người chơi để bắt đầu
+                  </p>
+                  <p className="text-blue-500 dark:text-blue-400 text-sm">
+                    Thêm người chơi bên trái ↓
+                  </p>
+                </div>
+              ) : (
+                <Button
+                  className="px-10 py-4 text-lg shadow-xl shadow-blue-200 dark:shadow-blue-900/30"
+                  onClick={startNewSet}
+                >
+                  Vào Bàn Ngay
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -1171,16 +1353,16 @@ export default function App() {
                       {confirmDeleteSetId === set.id ? (
                         <div className="flex items-center gap-1 ml-2">
                           <button
-                            onClick={() => deleteSet(set.id)}
-                            className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors cursor-pointer"
-                          >
-                            Xóa
-                          </button>
-                          <button
                             onClick={() => setConfirmDeleteSetId(null)}
                             className="px-2 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-bold rounded transition-colors cursor-pointer"
                           >
                             Hủy
+                          </button>
+                          <button
+                            onClick={() => deleteSet(set.id)}
+                            className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors cursor-pointer"
+                          >
+                            Xóa
                           </button>
                         </div>
                       ) : (
@@ -1546,6 +1728,15 @@ export default function App() {
                 </>
               )}
             </Button>
+            {telegramConfig.botToken && telegramConfig.chatId && (
+              <Button
+                className="flex-1 py-4 text-lg font-bold flex items-center justify-center gap-2"
+                variant="secondary"
+                onClick={() => sendTelegramNotification(generateReport())}
+              >
+                <Send size={20} /> Telegram
+              </Button>
+            )}
             <Button
               className="flex-1 py-4 text-lg font-bold flex items-center justify-center gap-2"
               variant="secondary"
@@ -1651,10 +1842,93 @@ export default function App() {
         </div>
       </Modal>
 
-      {!currentSet && (
+      {/* Telegram Settings Modal */}
+      <Modal
+        isOpen={modals.telegramSettings}
+        onClose={() => setModals({ ...modals, telegramSettings: false })}
+        title="Cài đặt Telegram"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Nhận thông báo về kết quả set qua Telegram
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+              Bot Token
+            </label>
+            <input
+              type="text"
+              className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm text-slate-800 dark:text-white"
+              placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+              value={telegramConfig.botToken}
+              onChange={(e) =>
+                setTelegramConfig({
+                  ...telegramConfig,
+                  botToken: e.target.value,
+                })
+              }
+            />
+            <a
+              href="https://t.me/BotFather"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-500 hover:underline"
+            >
+              Tạo bot tại @BotFather →
+            </a>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+              Chat ID
+            </label>
+            <input
+              type="text"
+              className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm text-slate-800 dark:text-white"
+              placeholder="123456789"
+              value={telegramConfig.chatId}
+              onChange={(e) =>
+                setTelegramConfig({ ...telegramConfig, chatId: e.target.value })
+              }
+            />
+            <a
+              href="https://t.me/userinfobot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-500 hover:underline"
+            >
+              Lấy Chat ID tại @userinfobot →
+            </a>
+          </div>
+
+          <div className="pt-2">
+            <Button
+              className="w-full"
+              variant={
+                telegramConfig.botToken && telegramConfig.chatId
+                  ? 'success'
+                  : 'secondary'
+              }
+              onClick={() => {
+                if (telegramConfig.botToken && telegramConfig.chatId) {
+                  sendTelegramNotification(
+                    '🎱 Pool Master đã kết nối thành công!',
+                  );
+                }
+              }}
+            >
+              {telegramConfig.botToken && telegramConfig.chatId
+                ? '✅ Đã lưu - Bấm để test'
+                : 'Lưu cài đặt'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {!currentSet && session.players.length >= 2 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
           <Button
-            disabled={session.players.length < 2}
             className="w-full py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter"
             onClick={startNewSet}
           >
