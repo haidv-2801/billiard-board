@@ -47,7 +47,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
     danger: "bg-red-500 text-white hover:bg-red-600",
     success: "bg-emerald-500 text-white hover:bg-emerald-600",
     warning: "bg-amber-500 text-white hover:bg-amber-600",
-    outline: "border border-slate-300 text-slate-600 hover:bg-slate-50"
+    outline: "border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
   };
   return (
     <button
@@ -66,8 +66,8 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-          <h3 className="font-bold text-lg">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full cursor-pointer"><XCircle size={24} /></button>
+          <h3 className="font-bold text-lg text-slate-800 dark:text-white">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full cursor-pointer text-slate-500 dark:text-slate-400"><XCircle size={24} /></button>
         </div>
         <div className="p-4 max-h-[80vh] overflow-y-auto">
           {children}
@@ -653,7 +653,7 @@ export default function App() {
         <div className="w-full max-w-md space-y-8 pt-12">
           <div className="text-center space-y-2">
             <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">Pool Master</h1>
-            <p className="text-slate-500 font-medium">Trình tính điểm Billiard chuyên nghiệp</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Trình tính điểm Billiard chuyên nghiệp</p>
           </div>
          
           {/* New Session */}
@@ -726,7 +726,7 @@ export default function App() {
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(null)}
-                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-500 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                             >
                               Huỷ
                             </button>
@@ -1116,9 +1116,9 @@ export default function App() {
           <div className="space-y-3">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mức đền (cộng dồn)</label>
             <div className="text-center bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
-              <span className="text-sm text-slate-500 font-medium">Tổng mức đền:</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng mức đền:</span>
               <span className="ml-2 text-3xl font-black text-amber-600">{tempData.penalizeAmount}</span>
-              <span className="text-sm text-slate-500 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {PENALIZE_STEPS.map(val => (
@@ -1171,9 +1171,9 @@ export default function App() {
           <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mức đền (cộng dồn)</label>
             <div className="text-center bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
-              <span className="text-sm text-slate-500 font-medium">Tổng cộng:</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng cộng:</span>
               <span className="ml-2 text-3xl font-black text-blue-600">{tempData.transferAmount}</span>
-              <span className="text-sm text-slate-500 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {PENALIZE_STEPS.map(val => (
@@ -1317,7 +1317,7 @@ export default function App() {
                       <div className="flex-1">
                         <p className="font-bold text-sm text-slate-800 dark:text-white">{log.action}</p>
                         {log.details && (
-                          <p className="text-xs text-slate-500 mt-1">{log.details}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{log.details}</p>
                         )}
                       </div>
                       <span className="text-[10px] text-slate-400 whitespace-nowrap">
@@ -1342,7 +1342,7 @@ export default function App() {
 
       <Modal isOpen={modals.endSession} onClose={() => setModals({...modals, endSession: false})} title="Kết Thúc">
         <div className="space-y-6">
-          <p className="text-slate-500">Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.</p>
+          <p className="text-slate-500 dark:text-slate-400">Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.</p>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => setModals({...modals, endSession: false})}>Huỷ</Button>
             <Button variant="danger" className="flex-1 font-bold" onClick={endSession}>Kết Thúc & Lưu</Button>
