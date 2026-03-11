@@ -81,6 +81,7 @@ export default function App() {
   });
   const [copied, setCopied] = useState(false);
   const [copiedHistory, setCopiedHistory] = useState(false);
+  const [toast, setToast] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [confirmDeleteSetId, setConfirmDeleteSetId] = useState(null);
@@ -97,6 +98,47 @@ export default function App() {
     editPlayerName: '',
     editSessionName: '',
   });
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Only when in session and has current set
+      if (view !== 'session' || !currentSet || !session.players.length) return;
+
+      // Ignore if typing in input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')
+        return;
+
+      const key = e.key;
+
+      // + key: add 1 to first player
+      if (key === '=' || key === '+') {
+        e.preventDefault();
+        if (session.players[0]) updateScore(session.players[0].id, 1);
+      }
+
+      // - key: subtract 1 from first player
+      if (key === '-') {
+        e.preventDefault();
+        if (session.players[0]) updateScore(session.players[0].id, -1);
+      }
+
+      // z key: undo
+      if (key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleUndo();
+      }
+
+      // n key: new set
+      if (key === 'n' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (session.players.length >= 2) startNewSet();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [view, currentSet, session, updateScore, handleUndo, startNewSet]);
 
   // --- IndexedDB: Load on mount ---
   useEffect(() => {
@@ -301,8 +343,16 @@ export default function App() {
 
   const endSession = async () => {
     // Send Telegram notification before clearing session
-    if (session && sets.length > 0) {
-      sendTelegramNotification(generateTelegramMessage('session'));
+    if (
+      session &&
+      sets.length > 0 &&
+      telegramConfig.botToken &&
+      telegramConfig.chatId
+    ) {
+      //setToast({ type: 'info', message: '📨 Đang gửi Telegram...' });
+      await sendTelegramNotification(generateTelegramMessage('session'));
+      //setToast({ type: 'success', message: '✅ Đã gửi Telegram!' });
+      // setTimeout(() => setToast(null), 3000);
     }
 
     if (session) {
@@ -367,7 +417,7 @@ export default function App() {
     }
   };
 
-  const startNewSet = () => {
+  function startNewSet() {
     if (session.players.length < 2) return;
     hapticFeedback('heavy');
     const initialPoints = {};
@@ -378,7 +428,7 @@ export default function App() {
     });
     setUndoStack([]);
     logAction('Bắt đầu set mới', `Set ${sets.length + 1} đã bắt đầu`);
-  };
+  }
 
   const pushUndo = () => {
     if (!currentSet) return;
@@ -397,16 +447,16 @@ export default function App() {
     setActionHistory((prev) => [...prev, log]);
   };
 
-  const handleUndo = () => {
+  function handleUndo() {
     if (undoStack.length === 0) return;
     hapticFeedback('light');
     const prev = undoStack[undoStack.length - 1];
     setCurrentSet(prev);
     setUndoStack((stack) => stack.slice(0, -1));
     logAction('Hoàn tác', 'Đã hoàn tác thao tác trước');
-  };
+  }
 
-  const updateScore = (playerId, delta) => {
+  function updateScore(playerId, delta) {
     if (!currentSet) return;
     pushUndo();
     hapticFeedback(delta > 0 ? 'light' : 'medium');
@@ -422,7 +472,7 @@ export default function App() {
       'Cập nhật điểm',
       `${playerName}: ${delta > 0 ? '+' : ''}${delta} điểm`,
     );
-  };
+  }
 
   const handleManualScoreChange = () => {
     if (!currentSet || tempData.selectedPlayerId === null) return;
@@ -552,7 +602,21 @@ export default function App() {
 
     // Send Telegram notification
     const setWithTimestamp = { ...currentSet, timestamp: new Date() };
-    sendTelegramNotification(generateTelegramMessage('set', setWithTimestamp));
+
+    // Show toast and send async
+    if (telegramConfig.botToken && telegramConfig.chatId) {
+      // setToast({ type: 'info', message: '📨 Đang gửi Telegram...' });
+      sendTelegramNotification(
+        generateTelegramMessage('set', setWithTimestamp),
+      ).then((success) => {
+        // setToast(
+        //   success
+        //     ? { type: 'success', message: '✅ Đã gửi Telegram!' }
+        //     : { type: 'error', message: '❌ Gửi Telegram thất bại' },
+        // );
+        // setTimeout(() => setToast(null), 3000);
+      });
+    }
 
     logAction('Kết thúc set', `Set ${currentSet.id} đã hoàn thành`);
     setSets((prev) => [...prev, setWithTimestamp]);
@@ -836,14 +900,45 @@ export default function App() {
   if (view === 'home') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center p-6">
-        <div className="w-full max-w-md space-y-8 pt-12">
-          <div className="text-center space-y-2">
+        <div className="w-full max-w-md space-y-8 pt-8">
+          {/* Hero Section */}
+          <div className="text-center space-y-4">
+            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-200 dark:shadow-blue-900/30">
+              <span className="text-5xl">🎱</span>
+            </div>
             <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">
               Pool Master
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium">
               Trình tính điểm Billiard chuyên nghiệp
             </p>
+          </div>
+
+          {/* Quick Start Guide */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
+            <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
+              🚀 Bắt đầu nhanh
+            </h3>
+            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                  1
+                </span>
+                <p>Tạo phiên chơi mới</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                  2
+                </span>
+                <p>Thêm ít nhất 2 người chơi</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                  3
+                </span>
+                <p>Vào bàn và bắt đầu tính điểm!</p>
+              </div>
+            </div>
           </div>
 
           {/* New Session */}
@@ -868,7 +963,7 @@ export default function App() {
               className="w-full py-4 text-lg"
               onClick={() => createSession(tempData.sessionName)}
             >
-              Bắt Đầu Session Mới
+              Bắt Đầu Chơi
             </Button>
           </Card>
 
@@ -1011,7 +1106,22 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 p-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Floating Ranking Badge */}
+            {sortedRankings.length > 0 && (
+              <div className="hidden sm:flex flex-col items-center bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-xl px-3 py-1.5 shadow-lg">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">🥇</span>
+                  <span className="font-bold text-sm truncate max-w-[80px]">
+                    {sortedRankings[0]?.name}
+                  </span>
+                </div>
+                <span className="text-xs font-bold opacity-90">
+                  {sortedRankings[0]?.total > 0 ? '+' : ''}
+                  {sortedRankings[0]?.total}
+                </span>
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-bold text-slate-800 dark:text-white truncate max-w-[200px]">
@@ -1045,31 +1155,35 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 sm:gap-2">
             <Button
               variant="secondary"
               onClick={() => setModals({ ...modals, history: true })}
-              className="flex items-center gap-1.5 text-sm"
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3"
             >
-              <ScrollText size={16} /> Log
+              <ScrollText size={14} />{' '}
+              <span className="hidden sm:inline">Log</span>
             </Button>
             <Button
               variant="secondary"
               onClick={() => setModals({ ...modals, report: true })}
-              className="flex items-center gap-1.5 text-sm"
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3"
             >
-              <FileText size={16} /> Báo cáo
+              <FileText size={14} />{' '}
+              <span className="hidden sm:inline">Báo cáo</span>
             </Button>
             <Button
               variant="secondary"
               onClick={() => setModals({ ...modals, endSession: true })}
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3"
             >
-              Kết thúc
+              <span className="hidden sm:inline">Kết thúc</span>
+              <span className="sm:hidden">✋</span>
             </Button>
             <Button
               variant="secondary"
               onClick={() => setModals({ ...modals, telegramSettings: true })}
-              className="flex items-center gap-1.5 text-sm"
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3"
               title="Cài đặt Telegram"
             >
               <Send size={16} />
@@ -1078,19 +1192,19 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
-          <Card className="p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white">
-                <Users size={18} /> Người Chơi
+      <main className="max-w-6xl mx-auto p-2 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+        <div className="lg:col-span-3 space-y-3 sm:space-y-6 order-2 lg:order-1">
+          <Card className="p-3 sm:p-4">
+            <div className="flex justify-between items-center mb-3 sm:mb-4">
+              <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white text-sm sm:text-base">
+                <Users size={16} /> Người Chơi
                 <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
                   ({session.players.length})
                 </span>
               </h3>
               <button
                 onClick={() => setModals({ ...modals, addPlayer: true })}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-2 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <UserPlus size={16} />
                 Thêm
@@ -1162,7 +1276,10 @@ export default function App() {
         <div className="lg:col-span-9 space-y-6 order-1 lg:order-2">
           {!currentSet ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
-              <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center animate-pulse">
+              <div
+                onClick={() => setModals({ ...modals, addPlayer: true })}
+                className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center animate-pulse"
+              >
                 <Plus size={40} />
               </div>
               {session.players.length < 2 ? (
@@ -1171,7 +1288,7 @@ export default function App() {
                     Cần ít nhất 2 người chơi để bắt đầu
                   </p>
                   <p className="text-blue-500 dark:text-blue-400 text-sm">
-                    Thêm người chơi bên trái ↓
+                    Bạn cần thêm người chơi mới
                   </p>
                 </div>
               ) : (
@@ -1184,53 +1301,57 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="flex flex-wrap gap-3 justify-between items-center">
-                <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex flex-wrap gap-2 sm:gap-3 justify-between items-center">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">
                   SET {currentSet.id}
                 </h3>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-1.5 sm:gap-2 flex-wrap">
                   <Button
                     variant="secondary"
                     onClick={handleUndo}
                     disabled={undoStack.length === 0}
-                    className="flex items-center gap-1 text-sm"
+                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
                   >
-                    <Undo2 size={14} /> Hoàn tác{' '}
+                    <Undo2 size={12} sm:size={14} />{' '}
+                    <span className="hidden sm:inline">Hoàn tác</span>{' '}
                     {undoStack.length > 0 && `(${undoStack.length})`}
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={resetCurrentSet}
-                    className="flex items-center gap-1 text-sm"
+                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
                   >
-                    <RotateCcw size={14} /> Reset
+                    <RotateCcw size={12} sm:size={14} />{' '}
+                    <span className="hidden sm:inline">Reset</span>
                   </Button>
                   <Button
                     variant="warning"
                     onClick={() => setModals({ ...modals, penalizeAll: true })}
-                    className="flex items-center gap-1 text-sm"
+                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
                   >
-                    <Crown size={14} /> Cả làng đền
+                    <Crown size={12} sm:size={14} />{' '}
+                    <span className="hidden sm:inline">Cả làng đền</span>
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => setModals({ ...modals, transfer: true })}
-                    className="flex items-center gap-1 text-sm"
+                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
                   >
-                    <ArrowRightLeft size={14} /> X đền Y
+                    <ArrowRightLeft size={12} sm:size={14} />{' '}
+                    <span className="hidden sm:inline">X đền Y</span>
                   </Button>
                 </div>
               </div>
 
               {/* Player Score Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {session.players.map((p) => (
                   <Card
                     key={p.id}
-                    className="p-5 flex flex-col items-center space-y-4 relative group"
+                    className="p-4 sm:p-5 flex flex-col items-center space-y-3 sm:space-y-4 relative group"
                   >
-                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => {
                           setTempData({
@@ -1240,55 +1361,55 @@ export default function App() {
                           });
                           setModals({ ...modals, editScore: true });
                         }}
-                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 cursor-pointer"
+                        className="p-1.5 sm:p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 cursor-pointer"
                       >
-                        <Settings size={20} />
+                        <Settings size={18} />
                       </button>
                     </div>
 
                     <div className="text-center">
-                      <p className="font-black text-slate-400 dark:text-slate-500 text-xs uppercase tracking-[0.2em]">
+                      <p className="font-bold sm:font-black text-xs sm:text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                         {p.name}
                       </p>
-                      <div className="text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
+                      <div className="text-5xl sm:text-6xl lg:text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
                         {currentSet.playerPoints[p.id] || 0}
                       </div>
                     </div>
 
-                    <div className="flex w-full gap-2">
+                    <div className="flex w-full gap-1.5 sm:gap-2">
                       <button
                         onClick={() => updateScore(p.id, -1)}
-                        className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+                        className="flex-1 py-3 sm:py-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg sm:rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 transition-all cursor-pointer active:scale-95"
                       >
-                        <Minus size={28} />
+                        <Minus size={24} />
                       </button>
                       <button
                         onClick={() => updateScore(p.id, 1)}
-                        className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all cursor-pointer"
+                        className="flex-[2] py-3 sm:py-4 bg-blue-600 hover:bg-blue-700 rounded-lg sm:rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all cursor-pointer active:scale-95"
                       >
-                        <Plus size={28} />
+                        <Plus size={24} />
                       </button>
                     </div>
 
                     {/* Step Controls */}
-                    <div className="w-full space-y-2">
-                      <div className="grid grid-cols-5 w-full gap-1.5">
+                    <div className="w-full space-y-1.5 sm:space-y-2">
+                      <div className="grid grid-cols-5 w-full gap-1">
                         {SCORE_STEPS.map((val) => (
                           <button
                             key={`plus-${val}`}
                             onClick={() => updateScore(p.id, val)}
-                            className="py-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-black text-[10px] rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 dark:border-blue-800 cursor-pointer"
+                            className="py-2 sm:py-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-[9px] sm:text-[10px] rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 dark:border-blue-800 cursor-pointer active:scale-95"
                           >
                             +{val}
                           </button>
                         ))}
                       </div>
-                      <div className="grid grid-cols-5 w-full gap-1.5">
+                      <div className="grid grid-cols-5 w-full gap-1">
                         {SCORE_STEPS.map((val) => (
                           <button
                             key={`minus-${val}`}
                             onClick={() => updateScore(p.id, -val)}
-                            className="py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-black text-[10px] rounded-lg hover:bg-red-100 transition-colors border border-red-100 dark:border-red-800 cursor-pointer"
+                            className="py-2 sm:py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold text-[9px] sm:text-[10px] rounded-lg hover:bg-red-100 transition-colors border border-red-100 dark:border-red-800 cursor-pointer active:scale-95"
                           >
                             -{val}
                           </button>
@@ -1299,10 +1420,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+              <div className="pt-4 sm:pt-6 border-t border-slate-200 dark:border-slate-700">
                 <Button
                   variant="success"
-                  className="w-full py-5 text-xl font-black shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest"
+                  className="w-full py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest"
                   onClick={finishSet}
                 >
                   Kết Thúc Set & Lưu
@@ -1927,13 +2048,33 @@ export default function App() {
       </Modal>
 
       {!currentSet && session.players.length >= 2 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-3 sm:px-4">
           <Button
-            className="w-full py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter"
+            className="w-full py-4 sm:py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-lg sm:text-xl font-black uppercase tracking-tighter"
             onClick={startNewSet}
           >
-            <Plus size={28} /> Bắt Đầu Ván Mới
+            <Plus size={24} sm:size={28} />{' '}
+            <span className="hidden sm:inline">Bắt Đầu Ván Mới</span>
+            <span className="sm:hidden">Vào Bàn</span>
           </Button>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-slide-down ${
+            toast.type === 'success'
+              ? 'bg-emerald-500 text-white'
+              : toast.type === 'error'
+                ? 'bg-red-500 text-white'
+                : 'bg-blue-500 text-white'
+          }`}
+        >
+          {toast.type === 'success' && <Check size={18} />}
+          {toast.type === 'error' && <XCircle size={18} />}
+          {toast.type === 'info' && <Send size={18} />}
+          <span className="font-medium">{toast.message}</span>
         </div>
       )}
     </div>
