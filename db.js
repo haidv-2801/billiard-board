@@ -5,6 +5,12 @@ const STORE_PLAYERS = 'players';
 
 function openDB() {
   return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+      console.warn('IndexedDB not available, using fallback mode');
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
+    
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (e) => {
