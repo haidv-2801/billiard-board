@@ -45,7 +45,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
     danger: "bg-red-500 text-white hover:bg-red-600",
     success: "bg-emerald-500 text-white hover:bg-emerald-600",
     warning: "bg-amber-500 text-white hover:bg-amber-600",
-    outline: "border border-slate-300 text-slate-600 hover:bg-slate-50"
+    outline: "border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
   };
   return (
     <button
@@ -64,8 +64,8 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-          <h3 className="font-bold text-lg">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full cursor-pointer"><XCircle size={24} /></button>
+          <h3 className="font-bold text-lg text-slate-800 dark:text-white">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full cursor-pointer text-slate-500 dark:text-slate-400"><XCircle size={24} /></button>
         </div>
         <div className="p-4 max-h-[80vh] overflow-y-auto">
           {children}
@@ -126,10 +126,14 @@ export default function App() {
 
   // --- IndexedDB: Load on mount ---
   useEffect(() => {
-    dbGetAllSessions().then(setSavedSessions).catch(() => {});
+    dbGetAllSessions().then(setSavedSessions).catch((err) => {
+      console.warn('Failed to load sessions from IndexedDB:', err);
+    });
     dbGetAllPlayers().then(players => {
       if (players.length > 0) setAllPlayers(players);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('Failed to load players from IndexedDB:', err);
+    });
   }, []);
 
   // --- IndexedDB: Auto-save session on every change ---
@@ -149,7 +153,9 @@ export default function App() {
       currentSet,
       status: 'active'
     };
-    dbSaveSession(record).catch(() => {});
+    dbSaveSession(record).catch((err) => {
+      console.warn('Failed to save session to IndexedDB:', err);
+    });
   }, [session, sets, currentSet]);
 
   useEffect(() => {
@@ -162,7 +168,9 @@ export default function App() {
   // Auto-save players
   useEffect(() => {
     if (allPlayers.length > 0) {
-      dbSaveAllPlayers(allPlayers).catch(() => {});
+      dbSaveAllPlayers(allPlayers).catch((err) => {
+        console.warn('Failed to save players to IndexedDB:', err);
+      });
     }
   }, [allPlayers]);
 
@@ -651,7 +659,7 @@ export default function App() {
         <div className="w-full max-w-md space-y-8 pt-12">
           <div className="text-center space-y-2">
             <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">Pool Master</h1>
-            <p className="text-slate-500 font-medium">Trình tính điểm Billiard chuyên nghiệp</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Trình tính điểm Billiard chuyên nghiệp</p>
           </div>
          
           {/* New Session */}
@@ -659,7 +667,7 @@ export default function App() {
             <div className="text-left space-y-2">
               <label className="text-sm font-semibold text-slate-600 dark:text-slate-300">Tên Phiên Chơi</label>
               <input
-                className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                 placeholder="Ví dụ: Tối Thứ 6 Cùng Quý"
                 value={tempData.sessionName || ''}
                 onChange={(e) => setTempData({...tempData, sessionName: e.target.value})}
@@ -674,7 +682,7 @@ export default function App() {
           {/* Saved Sessions */}
           {savedSessions.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-2">
                 <Clock size={14}/> Phiên chơi đã lưu
               </h3>
               <div className="space-y-2">
@@ -693,15 +701,15 @@ export default function App() {
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-1">
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
                             {(s.players || []).length} người chơi
                           </span>
-                          <span className="text-xs text-slate-400">•</span>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
                             {(s.sets || []).length} set
                           </span>
-                          <span className="text-xs text-slate-400">•</span>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
                             {formatTimeAgo(s.updatedAt)}
                           </span>
                         </div>
@@ -749,8 +757,8 @@ export default function App() {
           {/* Old players - clickable to pre-select */}
           {allPlayers.length > 0 && (
             <div className="text-left space-y-3">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-                Người chơi cũ {preSelectedPlayers.length > 0 && <span className="text-blue-500 normal-case">— đã chọn {preSelectedPlayers.length}</span>}
+              <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Người chơi cũ {preSelectedPlayers.length > 0 && <span className="text-blue-500 dark:text-blue-400 normal-case">— đã chọn {preSelectedPlayers.length}</span>}
               </h3>
               <div className="flex flex-wrap gap-2">
                 {allPlayers.slice(0, 10).map(p => {
@@ -803,7 +811,7 @@ export default function App() {
                   <Edit2 size={16} className="text-slate-400"/>
                 </button>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Bắt đầu: {session?.startTime instanceof Date
                   ? session.startTime.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})
                   : new Date(session?.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})
@@ -836,14 +844,14 @@ export default function App() {
         <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
           <Card className="p-4">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold flex items-center gap-2"><Users size={18}/> Người Chơi</h3>
+              <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white"><Users size={18}/> Người Chơi</h3>
               <button onClick={() => setModals({...modals, addPlayer: true})} className="p-1 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"><UserPlus size={20}/></button>
             </div>
             <div className="space-y-2">
               {session.players.map(p => (
                 <div key={p.id} className="flex justify-between items-center p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 group">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="font-medium truncate">{p.name}</span>
+                    <span className="font-medium truncate text-slate-700 dark:text-slate-200">{p.name}</span>
                     <button
                       onClick={() => {
                         setTempData(prev => ({
@@ -891,7 +899,7 @@ export default function App() {
               </div>
               <Button
                 disabled={session.players.length < 2}
-                className="px-10 py-4 text-lg shadow-xl shadow-blue-200"
+                className="px-10 py-4 text-lg shadow-xl shadow-blue-200 dark:shadow-blue-900/30"
                 onClick={startNewSet}
               >
                 Vào Bàn Ngay
@@ -934,7 +942,7 @@ export default function App() {
                     </div>
                    
                     <div className="text-center">
-                      <p className="font-black text-slate-400 text-xs uppercase tracking-[0.2em]">{p.name}</p>
+                      <p className="font-black text-slate-400 dark:text-slate-500 text-xs uppercase tracking-[0.2em]">{p.name}</p>
                       <div className="text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
                         {currentSet.playerPoints[p.id] || 0}
                       </div>
@@ -943,13 +951,13 @@ export default function App() {
                     <div className="flex w-full gap-2">
                       <button
                         onClick={() => updateScore(p.id, -1)}
-                        className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+                        className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
                       >
                         <Minus size={28} />
                       </button>
                       <button
                         onClick={() => updateScore(p.id, 1)}
-                        className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 transition-all cursor-pointer"
+                        className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all cursor-pointer"
                       >
                         <Plus size={28} />
                       </button>
@@ -995,13 +1003,13 @@ export default function App() {
           {/* History */}
           {sets.length > 0 && (
             <div className="mt-12 space-y-4">
-              <h3 className="font-bold flex items-center gap-2 text-slate-400 uppercase tracking-widest text-xs px-2"><History size={16}/> Nhật ký ván đấu</h3>
+              <h3 className="font-bold flex items-center gap-2 text-slate-400 dark:text-slate-500 uppercase tracking-widest text-xs px-2"><History size={16}/> Nhật ký ván đấu</h3>
               <div className="space-y-3">
                 {[...sets].reverse().map((set) => (
                   <Card key={set.id} className="p-4 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 group">
                     <div>
                       <span className="font-black text-slate-700 dark:text-slate-300">SET {set.id}</span>
-                      <p className="text-[10px] font-medium text-slate-400">
+                      <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
                         {(set.timestamp instanceof Date ? set.timestamp : new Date(set.timestamp)).toLocaleTimeString('vi-VN')}
                       </p>
                     </div>
@@ -1009,7 +1017,7 @@ export default function App() {
                       <div className="flex gap-4 overflow-x-auto no-scrollbar">
                         {session.players.map(p => (
                           <div key={p.id} className="text-right min-w-[60px]">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold truncate">{p.name}</p>
+                            <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-bold truncate">{p.name}</p>
                             <p className={`font-black tabular-nums ${set.playerPoints[p.id] >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-400'}`}>
                               {set.playerPoints[p.id] > 0 ? '+' : ''}{set.playerPoints[p.id]}
                             </p>
@@ -1058,7 +1066,7 @@ export default function App() {
         <div className="space-y-4">
           <input
             autoFocus
-            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium"
+            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên người chơi..."
             value={tempData.playerName}
             onChange={(e) => setTempData({...tempData, playerName: e.target.value})}
@@ -1073,7 +1081,7 @@ export default function App() {
             if (availablePlayers.length === 0) return null;
             return (
               <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Thêm nhanh</label>
+                <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thêm nhanh</label>
                 <div className="flex flex-wrap gap-2">
                   {availablePlayers.map(p => (
                     <button
@@ -1098,7 +1106,7 @@ export default function App() {
       >
         <div className="space-y-6">
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Người thắng (Người được đền)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Người thắng (Người được đền)</label>
             <div className="grid grid-cols-2 gap-2">
               {session.players.map(p => (
                 <button
@@ -1112,11 +1120,11 @@ export default function App() {
             </div>
           </div>
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mức đền (cộng dồn)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mức đền (cộng dồn)</label>
             <div className="text-center bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
-              <span className="text-sm text-slate-500 font-medium">Tổng mức đền:</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng mức đền:</span>
               <span className="ml-2 text-3xl font-black text-amber-600">{tempData.penalizeAmount}</span>
-              <span className="text-sm text-slate-500 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {PENALIZE_STEPS.map(val => (
@@ -1131,7 +1139,7 @@ export default function App() {
             </div>
             <button
               onClick={() => setTempData(prev => ({...prev, penalizeAmount: 0}))}
-              className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
+              className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
             >
               Reset về 0
             </button>
@@ -1150,16 +1158,16 @@ export default function App() {
         <div className="space-y-6">
           <div className="grid grid-cols-11 items-center gap-1">
             <div className="col-span-5 space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Người Đền (X)</label>
-              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm" value={tempData.selectedPlayerId || ''} onChange={(e) => setTempData({...tempData, selectedPlayerId: e.target.value})}>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Người Đền (X)</label>
+              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white" value={tempData.selectedPlayerId || ''} onChange={(e) => setTempData({...tempData, selectedPlayerId: e.target.value})}>
                 <option value="">Chọn...</option>
                 {session.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            <div className="col-span-1 text-center mt-6 text-slate-300"><ArrowRightLeft size={16} /></div>
+            <div className="col-span-1 text-center mt-6 text-slate-300 dark:text-slate-500"><ArrowRightLeft size={16} /></div>
             <div className="col-span-5 space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Người Nhận (Y)</label>
-              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm" value={tempData.targetPlayerId || ''} onChange={(e) => setTempData({...tempData, targetPlayerId: e.target.value})}>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Người Nhận (Y)</label>
+              <select className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-lg outline-none font-bold text-sm text-slate-800 dark:text-white" value={tempData.targetPlayerId || ''} onChange={(e) => setTempData({...tempData, targetPlayerId: e.target.value})}>
                 <option value="">Chọn...</option>
                 {session.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -1167,11 +1175,11 @@ export default function App() {
           </div>
          
           <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mức đền (cộng dồn)</label>
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mức đền (cộng dồn)</label>
             <div className="text-center bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
-              <span className="text-sm text-slate-500 font-medium">Tổng cộng:</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tổng cộng:</span>
               <span className="ml-2 text-3xl font-black text-blue-600">{tempData.transferAmount}</span>
-              <span className="text-sm text-slate-500 ml-1">điểm</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">điểm</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {PENALIZE_STEPS.map(val => (
@@ -1186,7 +1194,7 @@ export default function App() {
             </div>
             <button
               onClick={() => setTempData(prev => ({...prev, transferAmount: 0}))}
-              className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
+              className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer"
             >
               Reset về 0
             </button>
@@ -1208,7 +1216,7 @@ export default function App() {
         title="Chỉnh Sửa Điểm Tuyệt Đối"
       >
         <div className="space-y-4">
-          <input type="number" className="text-7xl font-black w-full bg-slate-50 dark:bg-slate-900 p-8 rounded-2xl text-center outline-none text-blue-600" value={tempData.manualScore} onChange={(e) => setTempData({...tempData, manualScore: e.target.value})} autoFocus />
+          <input type="number" className="text-7xl font-black w-full bg-slate-50 dark:bg-slate-900 p-8 rounded-2xl text-center outline-none text-blue-600 dark:text-blue-400" value={tempData.manualScore} onChange={(e) => setTempData({...tempData, manualScore: e.target.value})} autoFocus />
           <Button className="w-full py-4 text-lg font-bold" onClick={handleManualScoreChange}>Lưu Thay Đổi</Button>
         </div>
       </Modal>
@@ -1222,7 +1230,7 @@ export default function App() {
         <div className="space-y-4">
           <input
             type="text"
-            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium"
+            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên mới..."
             value={tempData.editPlayerName}
             onChange={(e) => setTempData({...tempData, editPlayerName: e.target.value})}
@@ -1248,7 +1256,7 @@ export default function App() {
         <div className="space-y-4">
           <input
             type="text"
-            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium"
+            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
             placeholder="Tên phiên chơi mới..."
             value={tempData.editSessionName}
             onChange={(e) => setTempData({...tempData, editSessionName: e.target.value})}
@@ -1272,7 +1280,7 @@ export default function App() {
         title="Báo Cáo Phiên Chơi"
       >
         <div className="space-y-4">
-          <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[50vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
+          <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[50vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
             {generateReport()}
           </pre>
           <div className="flex gap-2">
@@ -1302,7 +1310,7 @@ export default function App() {
       >
         <div className="space-y-4">
           {actionHistory.length === 0 ? (
-            <p className="text-center text-slate-400 py-8">Chưa có l���ch sử thao tác</p>
+            <p className="text-center text-slate-400 dark:text-slate-500 py-8">Chưa có lịch sử thao tác</p>
           ) : (
             <div className="space-y-2 max-h-[50vh] overflow-y-auto">
               {[...actionHistory].reverse().map((log, idx) => {
@@ -1315,10 +1323,10 @@ export default function App() {
                       <div className="flex-1">
                         <p className="font-bold text-sm text-slate-800 dark:text-white">{log.action}</p>
                         {log.details && (
-                          <p className="text-xs text-slate-500 mt-1">{log.details}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{log.details}</p>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
                         {time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                     </div>
@@ -1340,7 +1348,7 @@ export default function App() {
 
       <Modal isOpen={modals.endSession} onClose={() => setModals({...modals, endSession: false})} title="Kết Thúc">
         <div className="space-y-6">
-          <p className="text-slate-500">Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.</p>
+          <p className="text-slate-500 dark:text-slate-400">Phiên chơi sẽ được lưu lại. Bạn có thể tiếp tục sau từ trang chủ.</p>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => setModals({...modals, endSession: false})}>Huỷ</Button>
             <Button variant="danger" className="flex-1 font-bold" onClick={endSession}>Kết Thúc & Lưu</Button>
@@ -1350,7 +1358,7 @@ export default function App() {
 
       {!currentSet && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-           <Button disabled={session.players.length < 2} className="w-full py-5 rounded-2xl shadow-2xl flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter" onClick={startNewSet}>
+           <Button disabled={session.players.length < 2} className="w-full py-5 rounded-2xl shadow-2xl dark:shadow-blue-900/30 flex items-center justify-center gap-2 text-xl font-black uppercase tracking-tighter" onClick={startNewSet}>
              <Plus size={28}/> Bắt Đầu Ván Mới
            </Button>
         </div>
