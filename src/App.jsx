@@ -41,16 +41,6 @@ import { Card, Button, Modal } from './components/ui';
 
 // --- Main App ---
 
-// Các loại đền tiền có thể tùy chỉnh
-const PENALTY_TYPES = [
-  { id: 'basic', name: 'Đền cơ bản', icon: '🎱', defaultAmount: 10 },
-  { id: 'food', name: 'Đền ăn', icon: '🍜', defaultAmount: 20 },
-  { id: 'drink', name: 'Đền nước', icon: '🥤', defaultAmount: 10 },
-  { id: 'break', name: 'Đền mở bóng', icon: '🎱', defaultAmount: 5 },
-  { id: 'game', name: 'Đền hết game', icon: '🏆', defaultAmount: 15 },
-  { id: 'custom', name: 'Tùy chỉnh', icon: '✏️', defaultAmount: 10 },
-];
-
 // Đơn giản: Mỗi khoản đền lưu: ai đền, đền ai, số tiền
 // Ví dụ: A đền B 100 → { fromId: A, toId: B, amount: 100 }
 // Hiển thị: A: "-100 (đền B)", B: "+100 (A đền)"
@@ -444,6 +434,47 @@ export default function App() {
     }
   };
 
+  // Xóa người chơi khỏi session
+  const removePlayerFromSession = (playerId) => {
+    const playerName = session.players.find((p) => p.id === playerId)?.name;
+
+    setSession((prev) => ({
+      ...prev,
+      players: prev.players.filter((p) => p.id !== playerId),
+    }));
+
+    // Xóa khỏi currentSet nếu đang có set
+    if (currentSet) {
+      setCurrentSet((prev) => {
+        const newPoints = { ...prev.playerPoints };
+        delete newPoints[playerId];
+        return {
+          ...prev,
+          playerPoints: newPoints,
+          penalties: (prev.penalties || []).filter(
+            (pen) => pen.playerId !== playerId,
+          ),
+        };
+      });
+    }
+
+    // Xóa khỏi các set đã lưu
+    setSets((prev) =>
+      prev.map((set) => ({
+        ...set,
+        playerPoints: Object.fromEntries(
+          Object.entries(set.playerPoints).filter(([id]) => id !== playerId),
+        ),
+        penalties: (set.penalties || []).filter(
+          (pen) => pen.playerId !== playerId,
+        ),
+      })),
+    );
+
+    logAction('Xóa người chơi', `${playerName} đã được xóa khỏi phiên`);
+    hapticFeedback('medium');
+  };
+
   function startNewSet() {
     if (session.players.length < 2) return;
     hapticFeedback('heavy');
@@ -622,46 +653,6 @@ export default function App() {
     logAction('X đền Y', `${fromName} đền ${toName} ${transferAmount} điểm`);
     setModals((prev) => ({ ...prev, transfer: false }));
     setTempData((prev) => ({ ...prev, transferAmount: 0 }));
-  };
-
-  // Thêm một khoản đền chi tiết
-  const addPenalty = (playerId, type, amount, note = '') => {
-    if (!currentSet || !playerId || amount === 0) return;
-
-    const penaltyType =
-      PENALTY_TYPES.find((t) => t.id === type) || PENALTY_TYPES[0];
-    const playerName = session.players.find((p) => p.id === playerId)?.name;
-
-    pushUndo();
-    const groupId = Date.now(); // Dùng để xóa cặp đền cùng nhau
-
-    const newPenalty = {
-      id: Date.now(),
-      groupId, // Để xóa cặp cùng lúc
-      playerId,
-      playerName,
-      typeId: type,
-      typeName: penaltyType.name,
-      typeIcon: penaltyType.icon,
-      amount, // có thể âm (người được đền) hoặc dương (người đền)
-      note,
-      timestamp: new Date(),
-    };
-
-    // amount âm = người được đền (cộng điểm), dương = người đền (trừ điểm)
-    const actualAmount = amount > 0 ? -amount : Math.abs(amount);
-
-    setCurrentSet((prev) => ({
-      ...prev,
-      penalties: [...(prev.penalties || []), newPenalty],
-      playerPoints: {
-        ...prev.playerPoints,
-        [playerId]: (prev.playerPoints[playerId] || 0) + actualAmount,
-      },
-    }));
-
-    logAction('Thêm đền', `${playerName} ${note ? note : ''}: ${amount} điểm`);
-    hapticFeedback('medium');
   };
 
   // Xóa một khoản đền (xóa cả cặp nếu là đền A-B)
@@ -1473,19 +1464,29 @@ export default function App() {
               {session.players.map((p) => (
                 <div
                   key={p.id}
-                  onClick={() => {
-                    setTempData((prev) => ({
-                      ...prev,
-                      selectedPlayerId: p.id,
-                      editPlayerName: p.name,
-                    }));
-                    setModals({ ...modals, editPlayer: true });
-                  }}
                   className="flex justify-between items-center p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 group"
                 >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div
+                    onClick={() => {
+                      setTempData((prev) => ({
+                        ...prev,
+                        selectedPlayerId: p.id,
+                        editPlayerName: p.name,
+                      }));
+                      setModals({ ...modals, editPlayer: true });
+                    }}
+                    className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                  >
                     <span className="font-medium truncate text-slate-700 dark:text-slate-200">
                       {p.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`font-bold tabular-nums text-xs ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
+                    >
+                      {calculateTotalScores[p.id] > 0 ? '+' : ''}
+                      {calculateTotalScores[p.id]}
                     </span>
                     <button
                       onClick={(e) => {
@@ -1497,19 +1498,24 @@ export default function App() {
                         }));
                         setModals({ ...modals, editPlayer: true });
                       }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded cursor-pointer"
-                      title="Đổi tên"
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                      title="Sửa"
                     >
                       <Edit2 size={14} className="text-slate-400" />
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Xóa "${p.name}" khỏi phiên chơi?`)) {
+                          removePlayerFromSession(p.id);
+                        }
+                      }}
+                      className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded cursor-pointer text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                      title="Xóa"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  {/* Chỉ hiển thị tổng tích lũy trong sidebar - đã loại bỏ khỏi main view */}
-                  <span
-                    className={`font-bold tabular-nums text-xs ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
-                  >
-                    {calculateTotalScores[p.id] > 0 ? '+' : ''}
-                    {calculateTotalScores[p.id]}
-                  </span>
                 </div>
               ))}
             </div>
@@ -1647,30 +1653,38 @@ export default function App() {
                 {session.players.map((p) => {
                   // Lấy danh sách đền của người chơi này (amount > 0 = người đền, amount < 0 = người được đền)
                   const playerPenalties =
-                    currentSet?.penalties?.filter((pen) => pen.playerId === p.id) || [];
-                  
+                    currentSet?.penalties?.filter(
+                      (pen) => pen.playerId === p.id,
+                    ) || [];
+
                   // Tính tổng điểm
                   const totalScore = currentSet.playerPoints[p.id] || 0;
 
                   // Tách ra: đền người khác (nợ) và được người khác đền (có)
-                  const owedToOthers = playerPenalties.filter((pen) => pen.amount > 0);
-                  const receivedFromOthers = playerPenalties.filter((pen) => pen.amount < 0);
+                  const owedToOthers = playerPenalties.filter(
+                    (pen) => pen.amount > 0,
+                  );
+                  const receivedFromOthers = playerPenalties.filter(
+                    (pen) => pen.amount < 0,
+                  );
 
                   return (
-                    <Card
-                      key={p.id}
-                      className="p-4 space-y-3"
-                    >
+                    <Card key={p.id} className="p-4 space-y-3">
                       {/* Tên và Tổng điểm */}
                       <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
                         <h4 className="font-bold text-lg text-slate-800 dark:text-white">
                           {p.name}
                         </h4>
                         <div className="text-right">
-                          <span className={`text-2xl font-black tabular-nums ${
-                            totalScore >= 0 ? 'text-emerald-500' : 'text-red-500'
-                          }`}>
-                            {totalScore > 0 ? '+' : ''}{totalScore}
+                          <span
+                            className={`text-2xl font-black tabular-nums ${
+                              totalScore >= 0
+                                ? 'text-emerald-500'
+                                : 'text-red-500'
+                            }`}
+                          >
+                            {totalScore > 0 ? '+' : ''}
+                            {totalScore}
                           </span>
                         </div>
                       </div>
@@ -1752,21 +1766,24 @@ export default function App() {
           {/* History - Compact for mobile, click to view details */}
           {sets.length > 0 && (
             <div className="mt-12 space-y-3">
-              <h3 className="font-bold flex items-center gap-2 text-slate-400 dark:text-slate-500 uppercase tracking-widest text-xs px-2">
-                <History size={16} /> Nhật ký ván đấu
-              </h3>
+              <div className="flex items-center justify-between px-2">
+                <h3 className="font-bold flex items-center gap-2 text-slate-400 dark:text-slate-500 uppercase tracking-widest text-xs">
+                  <History size={16} /> Nhật ký ván đấu ({sets.length})
+                </h3>
+              </div>
+              <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 py-2 rounded-lg">
+                👆 Tap vào Set để xem chi tiết ai đền ai
+              </p>
               <div className="space-y-2">
                 {[...sets].reverse().map((set) => {
                   // Tính tổng đền trong set
-                  const totalPenalty = set.penalties
-                    ?.filter((p) => p.amount > 0)
-                    .reduce((sum, p) => sum + p.amount, 0) || 0;
+                  const totalPenalty =
+                    set.penalties
+                      ?.filter((p) => p.amount > 0)
+                      .reduce((sum, p) => sum + p.amount, 0) || 0;
 
                   return (
-                    <div
-                      key={set.id}
-                      className="relative"
-                    >
+                    <div key={set.id} className="relative">
                       {confirmDeleteSetId === set.id ? (
                         <Card className="p-3 bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800">
                           <div className="flex justify-between items-center">
@@ -1854,24 +1871,33 @@ export default function App() {
         title="Thêm Người Chơi"
       >
         <div className="space-y-4">
-          <input
-            autoFocus
-            className="w-full p-4 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-lg font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
-            placeholder="Tên người chơi..."
-            value={tempData.playerName}
-            onChange={(e) =>
-              setTempData({ ...tempData, playerName: e.target.value })
-            }
-            onKeyDown={(e) =>
-              e.key === 'Enter' && addPlayerToSession(tempData.playerName)
-            }
-          />
-          <Button
-            className="w-full py-4"
-            onClick={() => addPlayerToSession(tempData.playerName)}
-          >
-            Xác Nhận
-          </Button>
+          {/* Nhập tên mới */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
+              Tên mới
+            </label>
+            <input
+              autoFocus
+              className="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-base font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
+              placeholder="Nhập tên người chơi..."
+              value={tempData.playerName}
+              onChange={(e) =>
+                setTempData({ ...tempData, playerName: e.target.value })
+              }
+              onKeyDown={(e) =>
+                e.key === 'Enter' && addPlayerToSession(tempData.playerName)
+              }
+            />
+          </div>
+
+          {tempData.playerName.trim() && (
+            <Button
+              className="w-full py-3"
+              onClick={() => addPlayerToSession(tempData.playerName)}
+            >
+              ✓ Thêm "{tempData.playerName.trim()}"
+            </Button>
+          )}
 
           {/* Quick add from old players */}
           {(() => {
@@ -1882,18 +1908,26 @@ export default function App() {
             );
             if (availablePlayers.length === 0) return null;
             return (
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
-                <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                  Thêm nhanh
-                </label>
-                <div className="flex flex-wrap gap-2">
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    Người chơi có sẵn
+                  </label>
+                  <span className="text-xs text-slate-400">
+                    {availablePlayers.length} người
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   {availablePlayers.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => addPlayerToSession(p.name, true)}
-                      className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all cursor-pointer"
+                      className="p-3 rounded-xl text-sm font-medium bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center justify-between group"
                     >
-                      + {p.name}
+                      <span>{p.name}</span>
+                      <span className="opacity-0 group-hover:opacity-100 text-blue-500">
+                        +
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -2612,37 +2646,43 @@ export default function App() {
             </div>
           </div>
 
-          {/* Chi tiết đền */}
-          {selectedSetDetail?.penalties && selectedSetDetail.penalties.length > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
-              <h4 className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase mb-3">
-                📝 Chi Tiết Đền ({selectedSetDetail.penalties.filter(p => p.amount > 0).length})
-              </h4>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {selectedSetDetail.penalties
-                  .filter((p) => p.amount > 0)
-                  .map((penalty) => (
-                    <div
-                      key={penalty.id}
-                      className="flex justify-between items-center bg-white dark:bg-slate-800 rounded-lg px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{penalty.typeIcon}</span>
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                          {penalty.playerName}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          → {penalty.note?.replace('đền ', '') || ''}
+          {/* Chi tiết đền - Ai đền ai */}
+          {selectedSetDetail?.penalties &&
+            selectedSetDetail.penalties.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+                <h4 className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase mb-3">
+                  💰 Ai đền ai (
+                  {
+                    selectedSetDetail.penalties.filter((p) => p.amount > 0)
+                      .length
+                  }
+                  )
+                </h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {selectedSetDetail.penalties
+                    .filter((p) => p.amount > 0)
+                    .map((penalty) => (
+                      <div
+                        key={penalty.id}
+                        className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg px-3 py-2.5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-red-500 text-sm">
+                            {penalty.playerName}
+                          </span>
+                          <span className="text-amber-600 text-xs">đền</span>
+                          <span className="font-bold text-emerald-500 text-sm">
+                            {penalty.note?.replace('đền ', '') || ''}
+                          </span>
+                        </div>
+                        <span className="font-black text-red-500">
+                          {penalty.amount}
                         </span>
                       </div>
-                      <span className="font-bold text-red-500">
-                        -{penalty.amount}
-                      </span>
-                    </div>
-                  ))}
+                    ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <Button
             variant="outline"
