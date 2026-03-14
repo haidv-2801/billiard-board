@@ -41,8 +41,22 @@ import { Card, Button, Modal } from './components/ui';
 
 // --- Main App ---
 
+// Các loại đền tiền có thể tùy chỉnh
+const PENALTY_TYPES = [
+  { id: 'basic', name: 'Đền cơ bản', icon: '🎱', defaultAmount: 10 },
+  { id: 'food', name: 'Đền ăn', icon: '🍜', defaultAmount: 20 },
+  { id: 'drink', name: 'Đền nước', icon: '🥤', defaultAmount: 10 },
+  { id: 'break', name: 'Đền mở bóng', icon: '🎱', defaultAmount: 5 },
+  { id: 'game', name: 'Đền hết game', icon: '🏆', defaultAmount: 15 },
+  { id: 'custom', name: 'Tùy chỉnh', icon: '✏️', defaultAmount: 10 },
+];
+
+// Đơn giản: Mỗi khoản đền lưu: ai đền, đền ai, số tiền
+// Ví dụ: A đền B 100 → { fromId: A, toId: B, amount: 100 }
+// Hiển thị: A: "-100 (đền B)", B: "+100 (A đền)"
+
 export default function App() {
-  const SCORE_STEPS = [1, 5, 10, 15, 20];
+  const SCORE_STEPS = [5, 10, 15, 20];
   const PENALIZE_STEPS = [5, 10, 15, 20];
 
   // State quản lý Session
@@ -54,6 +68,7 @@ export default function App() {
 
   // State cho Set hiện tại
   const [currentSet, setCurrentSet] = useState(null);
+  const [showMobileRanking, setShowMobileRanking] = useState(false);
 
   // UI State
   const [view, setView] = useState('home');
@@ -69,6 +84,8 @@ export default function App() {
     history: false,
     confirmDeleteSet: false,
     telegramSettings: false,
+    addPenalty: false,
+    setSummary: false,
   });
   const [telegramConfig, setTelegramConfig] = useState(() => {
     const saved = localStorage.getItem('telegramConfig');
@@ -97,6 +114,9 @@ export default function App() {
     sessionName: new Date().toLocaleDateString('vi-VN'),
     editPlayerName: '',
     editSessionName: '',
+    penaltyType: 'basic',
+    penaltyAmount: 10,
+    penaltyNote: '',
   });
 
   // --- Keyboard Shortcuts ---
@@ -425,6 +445,7 @@ export default function App() {
     setCurrentSet({
       id: sets.length + 1,
       playerPoints: initialPoints,
+      penalties: [], // Mảng lưu chi tiết các lần đền
     });
     setUndoStack([]);
     logAction('Bắt đầu set mới', `Set ${sets.length + 1} đã bắt đầu`);
@@ -596,8 +617,102 @@ export default function App() {
     setTempData((prev) => ({ ...prev, transferAmount: 0 }));
   };
 
+  // Thêm một khoản đền chi tiết
+  const addPenalty = (playerId, type, amount, note = '') => {
+    if (!currentSet || !playerId || amount === 0) return;
+
+    const penaltyType =
+      PENALTY_TYPES.find((t) => t.id === type) || PENALTY_TYPES[0];
+    const playerName = session.players.find((p) => p.id === playerId)?.name;
+
+    pushUndo();
+    const groupId = Date.now(); // Dùng để xóa cặp đền cùng nhau
+
+    const newPenalty = {
+      id: Date.now(),
+      groupId, // Để xóa cặp cùng lúc
+      playerId,
+      playerName,
+      typeId: type,
+      typeName: penaltyType.name,
+      typeIcon: penaltyType.icon,
+      amount, // có thể âm (người được đền) hoặc dương (người đền)
+      note,
+      timestamp: new Date(),
+    };
+
+    // amount âm = người được đền (cộng điểm), dương = người đền (trừ điểm)
+    const actualAmount = amount > 0 ? -amount : Math.abs(amount);
+
+    setCurrentSet((prev) => ({
+      ...prev,
+      penalties: [...(prev.penalties || []), newPenalty],
+      playerPoints: {
+        ...prev.playerPoints,
+        [playerId]: (prev.playerPoints[playerId] || 0) + actualAmount,
+      },
+    }));
+
+    logAction('Thêm đền', `${playerName} ${note ? note : ''}: ${amount} điểm`);
+    hapticFeedback('medium');
+  };
+
+  // Xóa một khoản đền (xóa cả cặp nếu là đền A-B)
+  const removePenalty = (penaltyId) => {
+    if (!currentSet) return;
+    const penalty = currentSet.penalties?.find((p) => p.id === penaltyId);
+    if (!penalty) return;
+
+    pushUndo();
+
+    // Tìm tất cả penalties trong cùng group (cặp đền)
+    const groupPenalties =
+      currentSet.penalties?.filter((p) => p.groupId === penalty.groupId) || [];
+
+    // Hoàn tác điểm cho tất cả trong group
+    const pointsToRestore = {};
+    groupPenalties.forEach((p) => {
+      // amount âm = đã trừ, cần cộng lại; amount dương = đã cộng, cần trừ đi
+      const restoreAmount = p.amount > 0 ? -p.amount : Math.abs(p.amount);
+      pointsToRestore[p.playerId] =
+        (pointsToRestore[p.playerId] || 0) + restoreAmount;
+    });
+
+    setCurrentSet((prev) => ({
+      ...prev,
+      // Xóa tất cả penalties trong group
+      penalties: prev.penalties.filter((p) => p.groupId !== penalty.groupId),
+      playerPoints: {
+        ...prev.playerPoints,
+        ...Object.entries(pointsToRestore).reduce((acc, [pid, amt]) => {
+          acc[pid] = (prev.playerPoints[pid] || 0) + amt;
+          return acc;
+        }, {}),
+      },
+    }));
+    logAction('Xóa đền', `${penalty.note || 'đền'}: ${penalty.amount} điểm`);
+  };
+
+  // Tính tổng đền của mỗi người chơi trong set hiện tại
+  const calculateCurrentSetPenalties = useMemo(() => {
+    if (!currentSet?.penalties) return {};
+    const totals = {};
+    currentSet.penalties.forEach((p) => {
+      if (!totals[p.playerId]) totals[p.playerId] = 0;
+      totals[p.playerId] += p.amount;
+    });
+    return totals;
+  }, [currentSet?.penalties]);
+
   const finishSet = () => {
     if (!currentSet) return;
+
+    // Hiển thị modal tổng kết trước khi lưu
+    setModals((prev) => ({ ...prev, setSummary: true }));
+  };
+
+  // Xác nhận kết thúc set và lưu
+  const confirmFinishSet = () => {
     hapticFeedback('success');
 
     // Send Telegram notification
@@ -605,24 +720,54 @@ export default function App() {
 
     // Show toast and send async
     if (telegramConfig.botToken && telegramConfig.chatId) {
-      // setToast({ type: 'info', message: '📨 Đang gửi Telegram...' });
       sendTelegramNotification(
         generateTelegramMessage('set', setWithTimestamp),
-      ).then((success) => {
-        // setToast(
-        //   success
-        //     ? { type: 'success', message: '✅ Đã gửi Telegram!' }
-        //     : { type: 'error', message: '❌ Gửi Telegram thất bại' },
-        // );
-        // setTimeout(() => setToast(null), 3000);
-      });
+      ).then(() => {});
     }
 
     logAction('Kết thúc set', `Set ${currentSet.id} đã hoàn thành`);
     setSets((prev) => [...prev, setWithTimestamp]);
     setCurrentSet(null);
     setUndoStack([]);
+    setModals((prev) => ({ ...prev, setSummary: false }));
   };
+
+  // Tạo tổng kết set
+  const generateSetSummary = useCallback(() => {
+    if (!currentSet || !session) return '';
+
+    let summary = `📊 TỔNG KẾT SET ${currentSet.id}\n`;
+    summary += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // Điểm từng người
+    summary += `📈 Điểm số:\n`;
+    session.players.forEach((p) => {
+      const score = currentSet.playerPoints[p.id] || 0;
+      const sign = score > 0 ? '+' : '';
+      const color = score > 0 ? '🟢' : score < 0 ? '🔴' : '⚪';
+      summary += `  ${color} ${p.name}: ${sign}${score}\n`;
+    });
+
+    // Chi tiết đền
+    if (currentSet.penalties && currentSet.penalties.length > 0) {
+      summary += `\n📝 Chi tiết đền:\n`;
+      const byPlayer = {};
+      currentSet.penalties.forEach((p) => {
+        if (!byPlayer[p.playerName]) byPlayer[p.playerName] = [];
+        byPlayer[p.playerName].push(p);
+      });
+
+      Object.entries(byPlayer).forEach(([name, penalties]) => {
+        const total = penalties.reduce((sum, p) => sum + p.amount, 0);
+        summary += `  👤 ${name}: -${total} điểm\n`;
+        penalties.forEach((p) => {
+          summary += `    - ${p.typeIcon} ${p.typeName}: ${p.amount}${p.note ? ` (${p.note})` : ''}\n`;
+        });
+      });
+    }
+
+    return summary;
+  }, [currentSet, session]);
 
   const deleteSet = (setId) => {
     const deletedSet = sets.find((s) => s.id === setId);
@@ -1156,6 +1301,15 @@ export default function App() {
             </div>
           </div>
           <div className="flex gap-1 sm:gap-2">
+            {/* Mobile ranking toggle */}
+            <Button
+              variant="secondary"
+              onClick={() => setShowMobileRanking(!showMobileRanking)}
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 lg:hidden"
+            >
+              <Trophy size={14} />
+              <span>{showMobileRanking ? 'Ẩn' : 'BXH'}</span>
+            </Button>
             <Button
               variant="secondary"
               onClick={() => setModals({ ...modals, history: true })}
@@ -1193,7 +1347,10 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto p-2 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-        <div className="lg:col-span-3 space-y-3 sm:space-y-6 order-2 lg:order-1">
+        {/* Sidebar - Hidden on mobile by default, toggle with button */}
+        <div
+          className={`lg:col-span-3 space-y-3 sm:space-y-6 order-2 lg:order-1 ${showMobileRanking ? 'block' : 'hidden lg:block'}`}
+        >
           <Card className="p-3 sm:p-4">
             <div className="flex justify-between items-center mb-3 sm:mb-4">
               <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-white text-sm sm:text-base">
@@ -1244,29 +1401,13 @@ export default function App() {
                       <Edit2 size={14} className="text-slate-400" />
                     </button>
                   </div>
+                  {/* Chỉ hiển thị tổng tích lũy trong sidebar - đã loại bỏ khỏi main view */}
                   <span
-                    className={`font-bold tabular-nums ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
+                    className={`font-bold tabular-nums text-xs ${calculateTotalScores[p.id] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
                   >
                     {calculateTotalScores[p.id] > 0 ? '+' : ''}
                     {calculateTotalScores[p.id]}
                   </span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-none shadow-lg">
-            <h3 className="font-bold flex items-center gap-2 mb-4">
-              <Trophy size={18} /> Bảng Xếp Hạng
-            </h3>
-            <div className="space-y-3">
-              {sortedRankings.map((p, idx) => (
-                <div key={p.id} className="flex items-center gap-3">
-                  <span className="w-6 h-6 flex items-center justify-center rounded-full bg-white/20 text-[10px] font-black">
-                    {idx + 1}
-                  </span>
-                  <span className="flex-1 font-medium truncate">{p.name}</span>
-                  <span className="font-bold tabular-nums">{p.total}</span>
                 </div>
               ))}
             </div>
@@ -1302,122 +1443,157 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-4 sm:space-y-6">
+              {/* Hiển thị tất cả các khoản đền trong set - nhìn nhanh tổng quan */}
+              {currentSet?.penalties && currentSet.penalties.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-3 sm:p-4 border-2 border-amber-300 dark:border-amber-700">
+                  <h4 className="text-xs sm:text-sm font-bold text-amber-700 dark:text-amber-300 mb-2 flex items-center gap-2">
+                    💰 ĐỀN TRONG SET
+                    <span className="ml-auto bg-amber-200 dark:bg-amber-700 px-2 py-0.5 rounded-full text-xs">
+                      -
+                      {currentSet.penalties
+                        .filter((p) => p.amount > 0)
+                        .reduce((sum, p) => sum + p.amount, 0)}
+                    </span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    {(() => {
+                      // Group: ai đền ai
+                      const byPayer = {};
+                      currentSet.penalties
+                        .filter((p) => p.amount > 0)
+                        .forEach((p) => {
+                          if (!byPayer[p.playerId]) {
+                            byPayer[p.playerId] = {
+                              name: p.playerName,
+                              total: 0,
+                              breakdown: [],
+                            };
+                          }
+                          byPayer[p.playerId].total += p.amount;
+                          byPayer[p.playerId].breakdown.push({
+                            to: p.note?.replace('đền ', '') || '',
+                            amount: p.amount,
+                          });
+                        });
+
+                      return Object.values(byPayer).map((payer, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-600"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="font-bold text-red-600 dark:text-red-400 text-sm sm:text-base shrink-0">
+                              {payer.name}
+                            </span>
+                            <span className="text-amber-600 dark:text-amber-400 text-sm shrink-0">
+                              →
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                              {payer.breakdown
+                                .map((b) => `${b.to}:${b.amount}`)
+                                .join(', ')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            <span className="font-black text-amber-600 dark:text-amber-400 text-base sm:text-lg">
+                              -{payer.total}
+                            </span>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 sm:gap-3 justify-between items-center">
                 <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">
                   SET {currentSet.id}
                 </h3>
                 <div className="flex gap-1.5 sm:gap-2 flex-wrap">
                   <Button
-                    variant="secondary"
-                    onClick={handleUndo}
-                    disabled={undoStack.length === 0}
-                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
-                  >
-                    <Undo2 size={12} sm:size={14} />{' '}
-                    <span className="hidden sm:inline">Hoàn tác</span>{' '}
-                    {undoStack.length > 0 && `(${undoStack.length})`}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={resetCurrentSet}
-                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
-                  >
-                    <RotateCcw size={12} sm:size={14} />{' '}
-                    <span className="hidden sm:inline">Reset</span>
-                  </Button>
-                  <Button
                     variant="warning"
-                    onClick={() => setModals({ ...modals, penalizeAll: true })}
+                    onClick={() => setModals({ ...modals, addPenalty: true })}
                     className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
                   >
                     <Crown size={12} sm:size={14} />{' '}
-                    <span className="hidden sm:inline">Cả làng đền</span>
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setModals({ ...modals, transfer: true })}
-                    className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
-                  >
-                    <ArrowRightLeft size={12} sm:size={14} />{' '}
-                    <span className="hidden sm:inline">X đền Y</span>
+                    <span className="hidden sm:inline">Đền</span>
                   </Button>
                 </div>
               </div>
 
               {/* Player Score Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {session.players.map((p) => (
-                  <Card
-                    key={p.id}
-                    className="p-4 sm:p-5 flex flex-col items-center space-y-3 sm:space-y-4 relative group"
-                  >
-                    <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => {
-                          setTempData({
-                            ...tempData,
-                            selectedPlayerId: p.id,
-                            manualScore: currentSet.playerPoints[p.id] || 0,
-                          });
-                          setModals({ ...modals, editScore: true });
-                        }}
-                        className="p-1.5 sm:p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 cursor-pointer"
-                      >
-                        <Settings size={18} />
-                      </button>
-                    </div>
+                {session.players.map((p) => {
+                  // Lấy danh sách đền của người chơi này
+                  const playerPenalties =
+                    currentSet?.penalties?.filter(
+                      (pen) => pen.playerId === p.id,
+                    ) || [];
+                  const totalPenalty = playerPenalties.reduce(
+                    (sum, pen) => sum + pen.amount,
+                    0,
+                  );
 
-                    <div className="text-center">
-                      <p className="font-bold sm:font-black text-xs sm:text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        {p.name}
-                      </p>
-                      <div className="text-5xl sm:text-6xl lg:text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
-                        {currentSet.playerPoints[p.id] || 0}
+                  return (
+                    <Card
+                      key={p.id}
+                      className="p-4 sm:p-5 flex flex-col items-center space-y-3 sm:space-y-4 relative group"
+                    >
+                      <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <button
+                          onClick={() => {
+                            setTempData({
+                              ...tempData,
+                              selectedPlayerId: p.id,
+                              manualScore: currentSet.playerPoints[p.id] || 0,
+                            });
+                            setModals({ ...modals, editScore: true });
+                          }}
+                          className="p-1.5 sm:p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 cursor-pointer"
+                          title="Chỉnh sửa điểm"
+                        >
+                          <Settings size={18} />
+                        </button>
                       </div>
-                    </div>
 
-                    <div className="flex w-full gap-1.5 sm:gap-2">
-                      <button
-                        onClick={() => updateScore(p.id, -1)}
-                        className="flex-1 py-3 sm:py-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg sm:rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 transition-all cursor-pointer active:scale-95"
-                      >
-                        <Minus size={24} />
-                      </button>
-                      <button
-                        onClick={() => updateScore(p.id, 1)}
-                        className="flex-[2] py-3 sm:py-4 bg-blue-600 hover:bg-blue-700 rounded-lg sm:rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all cursor-pointer active:scale-95"
-                      >
-                        <Plus size={24} />
-                      </button>
-                    </div>
+                      <div className="text-center">
+                        <p className="font-bold sm:font-black text-xs sm:text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                          {p.name}
+                        </p>
+                        <div className="text-5xl sm:text-6xl lg:text-7xl font-black tabular-nums my-1 text-slate-800 dark:text-white">
+                          {currentSet.playerPoints[p.id] || 0}
+                        </div>
+                      </div>
 
-                    {/* Step Controls */}
-                    <div className="w-full space-y-1.5 sm:space-y-2">
-                      <div className="grid grid-cols-5 w-full gap-1">
-                        {SCORE_STEPS.map((val) => (
-                          <button
-                            key={`plus-${val}`}
-                            onClick={() => updateScore(p.id, val)}
-                            className="py-2 sm:py-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-[9px] sm:text-[10px] rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 dark:border-blue-800 cursor-pointer active:scale-95"
-                          >
-                            +{val}
-                          </button>
-                        ))}
+                      {/* Dãy số +/- */}
+                      <div className="w-full space-y-1.5 flex flex-col items-center justify-center">
+                        <div className="grid grid-cols-4 w-full gap-1">
+                          {SCORE_STEPS.map((val) => (
+                            <button
+                              key={`plus-${val}`}
+                              onClick={() => updateScore(p.id, val)}
+                              className="py-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-sm rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer active:scale-95"
+                            >
+                              +{val}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-4 w-full gap-1">
+                          {SCORE_STEPS.map((val) => (
+                            <button
+                              key={`minus-${val}`}
+                              onClick={() => updateScore(p.id, -val)}
+                              className="py-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold text-sm rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer active:scale-95"
+                            >
+                              -{val}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="grid grid-cols-5 w-full gap-1">
-                        {SCORE_STEPS.map((val) => (
-                          <button
-                            key={`minus-${val}`}
-                            onClick={() => updateScore(p.id, -val)}
-                            className="py-2 sm:py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold text-[9px] sm:text-[10px] rounded-lg hover:bg-red-100 transition-colors border border-red-100 dark:border-red-800 cursor-pointer active:scale-95"
-                          >
-                            -{val}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
 
               <div className="pt-4 sm:pt-6 border-t border-slate-200 dark:border-slate-700">
@@ -1764,6 +1940,364 @@ export default function App() {
           >
             Lưu Thay Đổi
           </Button>
+        </div>
+      </Modal>
+
+      {/* Add Penalty Modal - Ghi nhận đền: A đền B X điểm */}
+      <Modal
+        isOpen={modals.addPenalty}
+        onClose={() => setModals({ ...modals, addPenalty: false })}
+        title="A đền B"
+      >
+        <div className="space-y-4">
+          {/* Danh sách đền hiện tại - nhìn nhanh tổng quan */}
+          {currentSet?.penalties && currentSet.penalties.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 border border-amber-200 dark:border-amber-700">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase">
+                  💰 Đền trong set
+                </h4>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                  Tổng: -
+                  {currentSet.penalties
+                    .filter((p) => p.amount > 0)
+                    .reduce((sum, p) => sum + p.amount, 0)}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                {(() => {
+                  // Group penalties by player (chỉ lấy người đền, amount > 0)
+                  const penaltyByPlayer = {};
+                  currentSet.penalties
+                    .filter((p) => p.amount > 0)
+                    .forEach((p) => {
+                      if (!penaltyByPlayer[p.playerId]) {
+                        penaltyByPlayer[p.playerId] = {
+                          playerName: p.playerName,
+                          total: 0,
+                          details: [],
+                        };
+                      }
+                      penaltyByPlayer[p.playerId].total += p.amount;
+                      penaltyByPlayer[p.playerId].details.push({
+                        to: p.note?.replace('đền ', '') || '',
+                        amount: p.amount,
+                      });
+                    });
+
+                  return Object.values(penaltyByPlayer).map((player, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg px-2 py-1.5 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-red-600 dark:text-red-400">
+                          {player.playerName}
+                        </span>
+                        <span className="text-amber-600 dark:text-amber-400">
+                          →
+                        </span>
+                        <span className="text-slate-600 dark:text-slate-300">
+                          {player.details
+                            .map((d) => `${d.to}:${d.amount}`)
+                            .join(', ')}
+                        </span>
+                      </div>
+                      <span className="font-black text-amber-600 dark:text-amber-400">
+                        -{player.total}
+                      </span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Chọn người đền (A) */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-red-500 uppercase">
+              Người đền (A)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {session.players.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() =>
+                    setTempData({ ...tempData, selectedPlayerId: p.id })
+                  }
+                  className={`p-3 rounded-xl font-bold border-2 transition-all cursor-pointer ${
+                    tempData.selectedPlayerId === p.id
+                      ? 'bg-red-500 border-red-500 text-white shadow-lg'
+                      : 'bg-slate-50 dark:bg-slate-700 border-transparent text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Chọn người nhận (B) */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-emerald-500 uppercase">
+              Người nhận (B)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {session.players
+                .filter((p) => p.id !== tempData.selectedPlayerId)
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      setTempData({ ...tempData, targetPlayerId: p.id })
+                    }
+                    className={`p-3 rounded-xl font-bold border-2 transition-all cursor-pointer ${
+                      tempData.targetPlayerId === p.id
+                        ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg'
+                        : 'bg-slate-50 dark:bg-slate-700 border-transparent text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+            </div>
+          </div>
+
+          {/* Nhập số tiền */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+              Số tiền
+            </label>
+            <div className="text-center bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
+              <span className="text-5xl font-black text-amber-600">
+                {tempData.penaltyAmount}
+              </span>
+              <span className="text-sm text-slate-500 ml-1">điểm</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {PENALIZE_STEPS.map((val) => (
+                <button
+                  key={val}
+                  onClick={() =>
+                    setTempData((prev) => ({
+                      ...prev,
+                      penaltyAmount: prev.penaltyAmount + val,
+                    }))
+                  }
+                  className="py-4 rounded-xl font-black text-lg bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95 shadow-sm cursor-pointer"
+                >
+                  +{val}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() =>
+                setTempData((prev) => ({ ...prev, penaltyAmount: 10 }))
+              }
+              className="w-full py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-red-500 transition-colors"
+            >
+              Reset về 10
+            </button>
+          </div>
+
+          <Button
+            variant="danger"
+            className="w-full py-5 text-xl font-black"
+            disabled={
+              !tempData.selectedPlayerId ||
+              !tempData.targetPlayerId ||
+              tempData.penaltyAmount === 0
+            }
+            onClick={() => {
+              // A đền B X điểm = A -X, B +X
+              const fromName = session.players.find(
+                (p) => p.id === tempData.selectedPlayerId,
+              )?.name;
+              const toName = session.players.find(
+                (p) => p.id === tempData.targetPlayerId,
+              )?.name;
+              const groupId = Date.now(); // Dùng chung cho cặp đền
+
+              // Thêm khoản đền cho người đền (A) - amount dương = bị trừ
+              const penaltyForPayer = {
+                id: Date.now(),
+                groupId,
+                playerId: tempData.selectedPlayerId,
+                playerName: fromName,
+                typeId: 'custom',
+                typeName: 'Đền',
+                typeIcon: '💰',
+                amount: tempData.penaltyAmount,
+                note: `đền ${toName}`,
+                timestamp: new Date(),
+              };
+
+              // Thêm khoản đền cho người nhận (B) - amount âm = được cộng
+              const penaltyForReceiver = {
+                id: Date.now() + 1,
+                groupId,
+                playerId: tempData.targetPlayerId,
+                playerName: toName,
+                typeId: 'custom',
+                typeName: 'Đền',
+                typeIcon: '💰',
+                amount: -tempData.penaltyAmount,
+                note: `${fromName} đền`,
+                timestamp: new Date(),
+              };
+
+              pushUndo();
+              setCurrentSet((prev) => ({
+                ...prev,
+                penalties: [
+                  ...(prev.penalties || []),
+                  penaltyForPayer,
+                  penaltyForReceiver,
+                ],
+                playerPoints: {
+                  ...prev.playerPoints,
+                  [tempData.selectedPlayerId]:
+                    (prev.playerPoints[tempData.selectedPlayerId] || 0) -
+                    tempData.penaltyAmount,
+                  [tempData.targetPlayerId]:
+                    (prev.playerPoints[tempData.targetPlayerId] || 0) +
+                    tempData.penaltyAmount,
+                },
+              }));
+
+              logAction(
+                'Thêm đền',
+                `${fromName} đền ${toName} ${tempData.penaltyAmount} điểm`,
+              );
+              hapticFeedback('medium');
+
+              // Hiện toast thông báo
+              setToast({
+                type: 'success',
+                message: `✅ ${fromName} đền ${toName} ${tempData.penaltyAmount}`,
+              });
+              setTimeout(() => setToast(null), 2000);
+
+              // Reset nhưng KHÔNG đóng modal - để đền tiếp được
+              setTempData((prev) => ({
+                ...prev,
+                penaltyAmount: 10,
+                targetPlayerId: null,
+                selectedPlayerId: null, // Reset để chọn lại từ đầu
+              }));
+            }}
+          >
+            {tempData.selectedPlayerId && tempData.targetPlayerId
+              ? `✅ ${session.players.find((p) => p.id === tempData.selectedPlayerId)?.name} đền ${session.players.find((p) => p.id === tempData.targetPlayerId)?.name} ${tempData.penaltyAmount}`
+              : 'CHỌN NGƯỜI ĐỀN'}
+          </Button>
+
+          {currentSet?.penalties && currentSet.penalties.length > 0 && (
+            <Button
+              variant="outline"
+              className="w-full mt-2"
+              onClick={() => {
+                setModals((prev) => ({ ...prev, addPenalty: false }));
+                setTempData((prev) => ({
+                  ...prev,
+                  penaltyAmount: 10,
+                  targetPlayerId: null,
+                  selectedPlayerId: null,
+                }));
+              }}
+            >
+              Đóng
+            </Button>
+          )}
+        </div>
+      </Modal>
+
+      {/* Set Summary Modal - Tổng kết khi kết thúc set */}
+      <Modal
+        isOpen={modals.setSummary}
+        onClose={() => setModals({ ...modals, setSummary: false })}
+        title={`Tổng Kết Set ${currentSet?.id || ''}`}
+      >
+        <div className="space-y-4">
+          {/* Điểm số */}
+          <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3">
+              📈 Điểm Set
+            </h4>
+            <div className="space-y-2">
+              {session.players.map((p) => {
+                const score = currentSet?.playerPoints[p.id] || 0;
+                return (
+                  <div key={p.id} className="flex justify-between items-center">
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      {p.name}
+                    </span>
+                    <span
+                      className={`font-black text-lg tabular-nums ${
+                        score > 0
+                          ? 'text-emerald-500'
+                          : score < 0
+                            ? 'text-red-500'
+                            : 'text-slate-500'
+                      }`}
+                    >
+                      {score > 0 ? '+' : ''}
+                      {score}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chi tiết đền */}
+          {currentSet?.penalties && currentSet.penalties.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+              <h4 className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase mb-3">
+                📝 Chi Tiết Đền ({currentSet.penalties.length} khoản)
+              </h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {currentSet.penalties.map((penalty) => (
+                  <div
+                    key={penalty.id}
+                    className="flex justify-between items-center bg-white dark:bg-slate-800 rounded-lg px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{penalty.typeIcon}</span>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        {penalty.playerName}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {penalty.typeName}
+                      </span>
+                    </div>
+                    <span className="font-bold text-red-500">
+                      -{penalty.amount}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1 py-4 text-lg font-bold"
+              onClick={() =>
+                setModals((prev) => ({ ...prev, setSummary: false }))
+              }
+            >
+              Tiếp Tục Chơi
+            </Button>
+            <Button
+              variant="success"
+              className="flex-1 py-4 text-lg font-black"
+              onClick={confirmFinishSet}
+            >
+              Lưu Set
+            </Button>
+          </div>
         </div>
       </Modal>
 
